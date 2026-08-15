@@ -1,0 +1,46 @@
+{
+  "name": "@deterministic-code/patch-merger",
+  "version": "0.1.0",
+  "description": "Standalone patch-merge engine: filename-keyed patch writers that compose codegen target files (package.json, Cargo.toml, Dockerfile, .dockerignore, mod.rs/lib.rs, marked-block sources) from dumb patch-entry data.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deterministic-code/patch-merger.git"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./patch-merger": {
+      "types": "./dist/patch-merger.d.ts",
+      "import": "./dist/patch-merger.js",
+      "require": "./dist/patch-merger.cjs"
+    },
+    "./section-markers": {
+      "types": "./dist/section-markers.d.ts",
+      "import": "./dist/section-markers.js",
+      "require": "./dist/section-markers.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "prepare": "vite build",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vite-plugin-dts": "^4.4.0",
+    "vitest": "^2.1.9"
+  }
+}

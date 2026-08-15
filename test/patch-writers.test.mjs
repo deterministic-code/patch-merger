@@ -1,0 +1,296 @@
+import { describe, test, expect } from "vitest";
+import { cargoTomlWriter } from "../src/patch-writers/cargo-toml-writer.ts";
+import {
+  insertDockerfileCopies,
+  applyDockerfileCopies,
+} from "../src/patch-writers/dockerfile-copy-writer.ts";
+import { dockerfileWriter } from "../src/patch-writers/dockerfile-writer.ts";
+import {
+  dockerignoreWriter,
+  dockerignoreSection,
+  DOCKERIGNORE_TRIGGER,
+} from "../src/patch-writers/dockerignore-writer.ts";
+import {
+  applyMarkedFills,
+  markedBlockWriter,
+} from "../src/patch-writers/marked-block-writer.ts";
+import {
+  sharedAppendWriter,
+  conventionForTarget,
+  isSharedPatchTarget,
+  SHARED_FILE_CONVENTIONS,
+} from "../src/patch-writers/shared-append-writer.ts";
+import { SECTION_MARKERS } from "../src/section-markers.ts";
+
+const migrateBin = SECTION_MARKERS.MIGRATE_BIN;
+const migrateDeps = SECTION_MARKERS.MIGRATE_DEPS;
+const migrateCopy = SECTION_MARKERS.MIGRATE_COPY;
+
+describe("cargoTomlWriter", () => {
+  test("no pieces → null", () => {
+    expect(cargoTomlWriter([])).toBe(null);
+  });
+
+  test("no skeleton marker → returns first section-less piece verbatim", () => {
+    const seed = '[package]\nname = "migrate"\n';
+    expect(cargoTomlWriter([{ content: seed }])).toBe(seed);
+  });
+
+  test("marker-bearing skeleton wins and section pieces fill their blocks", () => {
+    const skeleton = [
+      "[package]",
+      `${migrateBin.start}`,
+      `${migrateBin.end}`,
+      `${migrateDeps.start}`,
+      `${migrateDeps.end}`,
+      "",
+    ].join("\n");
+    const out = cargoTomlWriter([
+      { content: '[package]\nname = "seed"\n' },
+      { content: skeleton },
+      { content: 'name = "migrate-up"', section: "MIGRATE_BIN" },
+      { content: 'rusqlite = "0.31"', section: "MIGRATE_DEPS" },
+    ]);
+    expect(out).toContain('name = "migrate-up"');
+    expect(out).toContain('rusqlite = "0.31"');
+    expect(out).toContain("[package]");
+  });
+});
+
+describe("insertDockerfileCopies", () => {
+  test("empty copies array → content unchanged", () => {
+    expect(insertDockerfileCopies("FROM x\n", [])).toBe("FROM x\n");
+  });
+
+  test("all lines already present → content unchanged", () => {
+    const content = "FROM x\nCOPY a b\n";
+    expect(insertDockerfileCopies(content, [{ src: "a", dest: "b" }])).toBe(
+      content,
+    );
+  });
+
+  test("inserts at MIGRATE_COPY marker when present", () => {
+    const content = `FROM x\n${migrateCopy.start}\n${migrateCopy.end}\nCOPY z z\n`;
+    const out = insertDockerfileCopies(content, [{ src: "a", dest: "b" }]);
+    const markerIdx = out.indexOf(migrateCopy.start);
+    expect(out.indexOf("COPY a b")).toBeGreaterThan(markerIdx);
+    expect(out.indexOf("COPY a b")).toBeLessThan(out.indexOf(migrateCopy.end));
+  });
+
+  test("no markers → anchors after the last COPY line", () => {
+    const content = "FROM x\nCOPY first first\nRUN build\n";
+    const out = insertDockerfileCopies(content, [{ src: "a", dest: "b" }]);
+    expect(out).toContain("COPY first first\nCOPY a b");
+  });
+
+  test("no markers and no COPY line → throws template-drift error", () => {
+    expect(() =>
+      insertDockerfileCopies("FROM x\nRUN build\n", [{ src: "a", dest: "b" }]),
+    ).toThrow(/template drift/);
+  });
+});
+
+describe("applyDockerfileCopies", () => {
+  test("missing WORKDIR line → throws template-drift error", () => {
+    expect(() =>
+      applyDockerfileCopies("FROM x\nCOPY a b\n", [
+        { content: JSON.stringify([{ src: "s", dest: "d" }]) },
+      ]),
+    ).toThrow(/missing the expected `WORKDIR` line/);
+  });
+
+  const copyWithWorkdir = (workdir) =>
+    applyDockerfileCopies(
+      `FROM x\nWORKDIR ${workdir}\n${migrateCopy.start}\n${migrateCopy.end}\n`,
+      [
+        {
+          content: JSON.stringify([
+            { src: "s.sql", dest: "d", workdirRelative: true },
+          ]),
+        },
+      ],
+    );
+
+  test("WORKDIR /app → no prefix on relative sources", () => {
+    expect(copyWithWorkdir("/app")).toContain("COPY s.sql d");
+  });
+
+  test("WORKDIR /app/backend → nested prefix on relative sources", () => {
+    expect(copyWithWorkdir("/app/backend")).toContain("COPY backend/s.sql d");
+  });
+
+  test("non-relative sources are copied as-is", () => {
+    const content = `FROM x\nWORKDIR /app/backend\n${migrateCopy.start}\n${migrateCopy.end}\n`;
+    const out = applyDockerfileCopies(content, [
+      { content: JSON.stringify([{ src: "abs.sql", dest: "d" }]) },
+    ]);
+    expect(out).toContain("COPY abs.sql d");
+  });
+});
+
+describe("dockerfileWriter", () => {
+  test("no skeleton (no FROM piece) → null", () => {
+    expect(dockerfileWriter([{ content: "not a dockerfile body" }])).toBe(null);
+  });
+
+  test("composes skeleton, COPY pieces, then marked fills", () => {
+    const skeleton = `FROM x\nWORKDIR /app\n${migrateCopy.start}\n${migrateCopy.end}\n${migrateBin.start}\n${migrateBin.end}\n`;
+    const out = dockerfileWriter([
+      { content: skeleton },
+      { content: JSON.stringify([{ src: "up.sql", dest: "/app/up.sql" }]) },
+      { content: "RUN migrate", section: "MIGRATE_BIN" },
+    ]);
+    expect(out).toContain("COPY up.sql /app/up.sql");
+    expect(out).toContain("RUN migrate");
+  });
+});
+
+describe("dockerignoreWriter", () => {
+  test("no pieces → null", () => {
+    expect(dockerignoreWriter([], {})).toBe(null);
+    expect(dockerignoreWriter(null, {})).toBe(null);
+  });
+
+  test("settings-less assemble derives lane from a trigger piece's section; unknown lane is skipped", () => {
+    const out = dockerignoreWriter(
+      [
+        { content: DOCKERIGNORE_TRIGGER },
+        {
+          content: DOCKERIGNORE_TRIGGER,
+          section: dockerignoreSection("python"),
+        },
+      ],
+      undefined,
+    );
+    expect(out).toContain(".git");
+    expect(out).toContain("*.sqlite");
+    expect(out).not.toContain("python");
+  });
+
+  test("declared single language emits that lane's flat ignores", () => {
+    const out = dockerignoreWriter(
+      [
+        {
+          content: DOCKERIGNORE_TRIGGER,
+          section: dockerignoreSection("typescript"),
+        },
+      ],
+      { backend: { languages: ["typescript"] } },
+    );
+    expect(out).toContain("node_modules");
+    expect(out).toContain("dist");
+    expect(out).not.toContain("backend/");
+  });
+
+  test("prefixes each lane with the piece path and adds frontend ignores in full-stack", () => {
+    const out = dockerignoreWriter(
+      [
+        {
+          content: DOCKERIGNORE_TRIGGER,
+          section: dockerignoreSection("typescript"),
+          path: "backend/typescript/",
+        },
+        {
+          content: DOCKERIGNORE_TRIGGER,
+          section: dockerignoreSection("rust"),
+          path: "backend/rust/",
+        },
+      ],
+      { applicationTier: "full-stack" },
+    );
+    expect(out).toContain("backend/typescript/node_modules");
+    expect(out).toContain("backend/rust/target");
+    expect(out).toContain("frontend/node_modules");
+  });
+});
+
+describe("applyMarkedFills / markedBlockWriter", () => {
+  test("unknown section → throws", () => {
+    expect(() =>
+      applyMarkedFills("body", [{ content: "x", section: "NOT_A_SECTION" }]),
+    ).toThrow(/unknown section/);
+  });
+
+  test("markedBlockWriter with no skeleton → null", () => {
+    expect(markedBlockWriter([{ content: "x", section: "MIGRATE_BIN" }])).toBe(
+      null,
+    );
+  });
+
+  test("markedBlockWriter fills the skeleton's marked region", () => {
+    const skeleton = `head\n${migrateBin.start}\n${migrateBin.end}\ntail\n`;
+    const out = markedBlockWriter([
+      { content: skeleton },
+      { content: "filled", section: "MIGRATE_BIN" },
+    ]);
+    expect(out).toContain("filled");
+    expect(out).toContain("head");
+    expect(out).toContain("tail");
+  });
+});
+
+describe("shared-append-writer helpers", () => {
+  test("conventionForTarget keys on basename, unknown → null", () => {
+    expect(conventionForTarget("rust/.env")).toEqual(
+      SHARED_FILE_CONVENTIONS[".env"],
+    );
+    expect(conventionForTarget("some/other.txt")).toBe(null);
+  });
+
+  test("isSharedPatchTarget reflects convention presence", () => {
+    expect(isSharedPatchTarget("a/.gitignore")).toBe(true);
+    expect(isSharedPatchTarget("a/random.md")).toBe(false);
+  });
+});
+
+describe("sharedAppendWriter", () => {
+  const envConvention = SHARED_FILE_CONVENTIONS[".env"];
+  const composeConvention = SHARED_FILE_CONVENTIONS["docker-compose.yml"];
+
+  test("augmenter-only pieces (no owner section) → null", () => {
+    const write = sharedAppendWriter(envConvention);
+    expect(write([{ content: "DB_URL=x", section: "DB_ENV" }])).toBe(null);
+  });
+
+  test("owner present but all blocks empty → returns bare skeleton", () => {
+    const write = sharedAppendWriter(composeConvention);
+    expect(
+      write([{ content: "", section: "COMPOSE_SERVICE_TYPESCRIPT" }]),
+    ).toBe(composeConvention.skeleton);
+  });
+
+  test("empty skeleton convention composes blocks with no leading newline", () => {
+    const write = sharedAppendWriter(envConvention);
+    const out = write([{ content: "PORT=3000", section: "ENV_TYPESCRIPT" }]);
+    expect(out).toBe("PORT=3000\n");
+  });
+
+  test("skeleton ending in newline is used as-is as the base", () => {
+    const write = sharedAppendWriter(composeConvention);
+    const out = write([
+      { content: "app:\n  image: x", section: "COMPOSE_SERVICE_TYPESCRIPT" },
+    ]);
+    expect(out.startsWith("services:\n")).toBe(true);
+    expect(out).toContain("  app:");
+  });
+
+  test("non-empty skeleton without trailing newline gets a separating newline", () => {
+    const convention = {
+      skeleton: "header:",
+      indent: "",
+      sectionPrefix: "ENV",
+    };
+    const write = sharedAppendWriter(convention);
+    const out = write([{ content: "PORT=3000", section: "ENV_TYPESCRIPT" }]);
+    expect(out).toBe("header:\nPORT=3000\n");
+  });
+
+  test("same-section pieces collapse to the last contribution", () => {
+    const write = sharedAppendWriter(envConvention);
+    const out = write([
+      { content: "PORT=1", section: "ENV_TYPESCRIPT" },
+      { content: "PORT=2", section: "ENV_TYPESCRIPT" },
+    ]);
+    expect(out).toBe("PORT=2\n");
+  });
+});
