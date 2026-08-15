@@ -20,11 +20,13 @@ import {
   isSharedPatchTarget,
   SHARED_FILE_CONVENTIONS,
 } from "../src/patch-writers/shared-append-writer.ts";
-import { SECTION_MARKERS } from "../src/section-markers.ts";
-
-const migrateBin = SECTION_MARKERS.MIGRATE_BIN;
-const migrateDeps = SECTION_MARKERS.MIGRATE_DEPS;
-const migrateCopy = SECTION_MARKERS.MIGRATE_COPY;
+const marker = (id) => ({
+  start: `# === BEGIN ${id} — see PATCH_PLAN ===`,
+  end: `# === END ${id} ===`,
+});
+const migrateBin = marker("MIGRATE_BIN");
+const migrateDeps = marker("MIGRATE_DEPS");
+const migrateCopy = marker("MIGRATE_COPY");
 
 describe("cargoTomlWriter", () => {
   test("no pieces → null", () => {
@@ -69,9 +71,13 @@ describe("insertDockerfileCopies", () => {
     );
   });
 
-  test("inserts at MIGRATE_COPY marker when present", () => {
+  test("inserts at the named anchor section's marker when present", () => {
     const content = `FROM x\n${migrateCopy.start}\n${migrateCopy.end}\nCOPY z z\n`;
-    const out = insertDockerfileCopies(content, [{ src: "a", dest: "b" }]);
+    const out = insertDockerfileCopies(
+      content,
+      [{ src: "a", dest: "b" }],
+      "MIGRATE_COPY",
+    );
     const markerIdx = out.indexOf(migrateCopy.start);
     expect(out.indexOf("COPY a b")).toBeGreaterThan(markerIdx);
     expect(out.indexOf("COPY a b")).toBeLessThan(out.indexOf(migrateCopy.end));
@@ -104,9 +110,10 @@ describe("applyDockerfileCopies", () => {
       `FROM x\nWORKDIR ${workdir}\n${migrateCopy.start}\n${migrateCopy.end}\n`,
       [
         {
-          content: JSON.stringify([
-            { src: "s.sql", dest: "d", workdirRelative: true },
-          ]),
+          content: JSON.stringify({
+            anchorSection: "MIGRATE_COPY",
+            copies: [{ src: "s.sql", dest: "d", workdirRelative: true }],
+          }),
         },
       ],
     );
@@ -122,7 +129,12 @@ describe("applyDockerfileCopies", () => {
   test("non-relative sources are copied as-is", () => {
     const content = `FROM x\nWORKDIR /app/backend\n${migrateCopy.start}\n${migrateCopy.end}\n`;
     const out = applyDockerfileCopies(content, [
-      { content: JSON.stringify([{ src: "abs.sql", dest: "d" }]) },
+      {
+        content: JSON.stringify({
+          anchorSection: "MIGRATE_COPY",
+          copies: [{ src: "abs.sql", dest: "d" }],
+        }),
+      },
     ]);
     expect(out).toContain("COPY abs.sql d");
   });
@@ -137,7 +149,12 @@ describe("dockerfileWriter", () => {
     const skeleton = `FROM x\nWORKDIR /app\n${migrateCopy.start}\n${migrateCopy.end}\n${migrateBin.start}\n${migrateBin.end}\n`;
     const out = dockerfileWriter([
       { content: skeleton },
-      { content: JSON.stringify([{ src: "up.sql", dest: "/app/up.sql" }]) },
+      {
+        content: JSON.stringify({
+          anchorSection: "MIGRATE_COPY",
+          copies: [{ src: "up.sql", dest: "/app/up.sql" }],
+        }),
+      },
       { content: "RUN migrate", section: "MIGRATE_BIN" },
     ]);
     expect(out).toContain("COPY up.sql /app/up.sql");
@@ -205,10 +222,10 @@ describe("dockerignoreWriter", () => {
 });
 
 describe("applyMarkedFills / markedBlockWriter", () => {
-  test("unknown section → throws", () => {
+  test("section with no marked region in the skeleton → throws", () => {
     expect(() =>
       applyMarkedFills("body", [{ content: "x", section: "NOT_A_SECTION" }]),
-    ).toThrow(/unknown section/);
+    ).toThrow(/no marked region for section/);
   });
 
   test("markedBlockWriter with no skeleton → null", () => {

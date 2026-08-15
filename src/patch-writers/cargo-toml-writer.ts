@@ -1,16 +1,16 @@
 import { applyMarkedFills } from "./marked-block-writer.ts";
-import { SECTION_MARKERS } from "../section-markers.ts";
+import { firstSectionMarkerStart } from "../marked-sections.ts";
 
 interface Piece {
   content: string;
   section?: string;
 }
 
-/** Cargo.toml is create-or-update, composed from its pieces. A combined scaffold carries backend_app's skeleton piece (the no-section body with MIGRATE_BIN/MIGRATE_DEPS markers) which the section pieces fill; a standalone migrate scope has only its self-complete seed (a no-section body with no markers), used as-is. The marker-bearing no-section piece wins when both are present — mirroring the old "keep backend_app's Cargo.toml over the seed" contract. */
+/** Cargo.toml is create-or-update, composed from its pieces. When a no-section body carries marked regions it is the skeleton the section pieces fill; a self-complete seed (a no-section body with no markers) is used as-is. The marker-bearing no-section piece wins when both are present. */
 export function cargoTomlWriter(pieces: Piece[]): string | null {
   const noSection = pieces.filter((p) => !p.section);
-  const skeleton = noSection.find((p) =>
-    p.content.includes(SECTION_MARKERS.MIGRATE_BIN.start),
+  const skeleton = noSection.find(
+    (p) => firstSectionMarkerStart(p.content) !== null,
   );
   if (skeleton) {
     return applyMarkedFills(

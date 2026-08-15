@@ -31,6 +31,30 @@ export function indentBody(block: string, indent: string): string {
     .join("\n");
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The generic marked-block convention: a region for `section` is delimited by the line containing `=== BEGIN <section>` and the line containing `=== END <section>`, whatever the host language's comment syntax. Returns the full marker lines (the exact strings `replaceMarkedBlockText` needs), or null when the section is absent. The specific section vocabulary lives with the emitters that stamp the markers, not here. */
+export function sectionMarkerLines(
+  content: string,
+  section: string,
+): { start: string; end: string } | null {
+  const begin = content.match(
+    new RegExp(`^.*===\\s*BEGIN\\s+${escapeRegExp(section)}\\b.*$`, "m"),
+  );
+  const end = content.match(
+    new RegExp(`^.*===\\s*END\\s+${escapeRegExp(section)}\\b.*$`, "m"),
+  );
+  return begin && end ? { start: begin[0], end: end[0] } : null;
+}
+
+/** The first `=== BEGIN <id>` marker line in `content`, or null when none — the generic anchor for insertion writers (the Dockerfile COPY inserter) that target the leading marked region. */
+export function firstSectionMarkerStart(content: string): string | null {
+  const m = content.match(/^.*===\s*BEGIN\s+\S+.*$/m);
+  return m ? m[0] : null;
+}
+
 export interface ReplaceMarkedBlockArgs {
   original: string;
   startMarker: string;

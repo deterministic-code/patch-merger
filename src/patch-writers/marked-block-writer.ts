@@ -1,5 +1,7 @@
-import { replaceMarkedBlockText } from "../marked-sections.ts";
-import { SECTION_MARKERS } from "../section-markers.ts";
+import {
+  replaceMarkedBlockText,
+  sectionMarkerLines,
+} from "../marked-sections.ts";
 
 interface SectionPiece {
   content: string;
@@ -18,12 +20,10 @@ export function applyMarkedFills(
 ): string {
   let next = content;
   for (const patch of sectionPieces) {
-    const markers = (
-      SECTION_MARKERS as Record<string, { start: string; end: string }>
-    )[patch.section as string];
+    const markers = sectionMarkerLines(next, patch.section as string);
     if (!markers) {
       throw new Error(
-        `applyMarkedFills: unknown section ${JSON.stringify(patch.section)}`,
+        `applyMarkedFills: skeleton has no marked region for section ${JSON.stringify(patch.section)}`,
       );
     }
     next = replaceMarkedBlockText({

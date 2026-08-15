@@ -5,7 +5,6 @@ import dts from "vite-plugin-dts";
 const entries: Record<string, string> = {
   index: "src/index.ts",
   "patch-merger": "src/patch-merger.ts",
-  "section-markers": "src/section-markers.ts",
 };
 
 export default defineConfig({

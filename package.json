@@ -21,11 +21,6 @@
       "types": "./dist/patch-merger.d.ts",
       "import": "./dist/patch-merger.js",
       "require": "./dist/patch-merger.cjs"
-    },
-    "./section-markers": {
-      "types": "./dist/section-markers.d.ts",
-      "import": "./dist/section-markers.js",
-      "require": "./dist/section-markers.cjs"
     }
   },
   "files": [
