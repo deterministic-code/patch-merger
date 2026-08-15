@@ -29,7 +29,6 @@
   ],
   "scripts": {
     "build": "vite build",
-    "prepare": "vite build",
     "test": "vitest run"
   },
   "devDependencies": {
