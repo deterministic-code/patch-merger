@@ -8,28 +8,28 @@
     "type": "git",
     "url": "git+https://github.com/deterministic-code/patch-merger.git"
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./typescript/dist/index.cjs",
+  "module": "./typescript/dist/index.js",
+  "types": "./typescript/dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "types": "./typescript/dist/index.d.ts",
+      "import": "./typescript/dist/index.js",
+      "require": "./typescript/dist/index.cjs"
     },
     "./patch-merger": {
-      "types": "./dist/patch-merger.d.ts",
-      "import": "./dist/patch-merger.js",
-      "require": "./dist/patch-merger.cjs"
+      "types": "./typescript/dist/patch-merger.d.ts",
+      "import": "./typescript/dist/patch-merger.js",
+      "require": "./typescript/dist/patch-merger.cjs"
     }
   },
   "files": [
-    "dist",
-    "src"
+    "typescript/dist",
+    "typescript/src"
   ],
   "scripts": {
-    "build": "vite build",
-    "test": "vitest run"
+    "build": "vite build --config typescript/vite.config.ts",
+    "test": "vitest run --config typescript/vite.config.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -36,4 +36,4 @@ Pieces can also be persisted one-file-per-entry (`PATCHES_DIR`) and composed at 
 
 ## Build
 
-`vite build` → `dist` (ESM + CJS + bundled `.d.ts`). Consumed as a git dependency, the `prepare` script builds `dist` on install.
+`vite build` → `typescript/dist` (ESM + CJS + bundled `.d.ts`). Consumed as a git dependency, the `prepare` script builds `typescript/dist` on install.
