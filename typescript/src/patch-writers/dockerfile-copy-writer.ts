@@ -1,5 +1,5 @@
-import { parseJson } from "../json.ts";
-import { sectionMarkerLines } from "../marked-sections.ts";
+import { parseJson } from "../common/json.ts";
+import { sectionMarkerLines } from "../common/marked-sections.ts";
 
 interface DockerfileCopy {
   src: string;

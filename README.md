@@ -12,11 +12,10 @@ Writers live in `patch-writers` and are keyed by filename (basename, or extensio
 
 | Target | Writer | Merge strategy |
 | --- | --- | --- |
-| `.env` / `.gitignore` / `docker-compose.yml` | `sharedAppendWriter` | section-keyed upsert-append |
+| `.env` / `.gitignore` / `.dockerignore` / `docker-compose.yml` | `sharedAppendWriter` | section-keyed upsert-append |
 | `package.json` | `packageJsonMergeWriter` | deep JSON merge |
 | `Cargo.toml` | `cargoTomlWriter` | base + marked blocks |
 | `Dockerfile` | `dockerfileWriter` | COPY insertion + marked blocks |
-| `.dockerignore` | `dockerignoreWriter` | per-lane ignores prefixed by the directory on `target` |
 | `mod.rs` / `lib.rs` | `modRsWriter` / `libRsWriter` | union of module/use blocks |
 | `app.ts` / `test-app.ts` / `entrypoint.sh` / `.csproj` | `markedBlockWriter` | fill named marker regions |
 

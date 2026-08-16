@@ -137,14 +137,14 @@ describe("PatchMerger — in-memory apply via an injected writer", () => {
     merger.register(
       new PatchEntry({
         target: "backend/typescript/.dockerignore",
-        content: "#",
+        content: "backend/typescript/node_modules",
         section: "DOCKERIGNORE_TYPESCRIPT",
       }),
     );
     merger.register(
       new PatchEntry({
         target: "backend/rust/.dockerignore",
-        content: "#",
+        content: "backend/rust/target",
         section: "DOCKERIGNORE_RUST",
       }),
     );

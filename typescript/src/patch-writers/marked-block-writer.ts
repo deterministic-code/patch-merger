@@ -1,7 +1,7 @@
 import {
   replaceMarkedBlockText,
   sectionMarkerLines,
-} from "../marked-sections.ts";
+} from "../common/marked-sections.ts";
 
 interface SectionPiece {
   content: string;
@@ -29,12 +29,12 @@ export function applyMarkedFills(
         `applyMarkedFills: skeleton has no marked region for section ${JSON.stringify(patch.section)}`,
       );
     }
-    next = replaceMarkedBlockText({
-      original: next,
-      startMarker: markers.start,
-      endMarker: markers.end,
-      block: patch.content,
-    });
+    next = replaceMarkedBlockText(
+      next,
+      markers.start,
+      markers.end,
+      patch.content,
+    );
   }
   return next;
 }
