@@ -9,6 +9,7 @@ import {
   parsePatchEntryLine,
   patchPieceFilename,
   PATCH_ENTRY_LINE_PREFIX,
+  DOCKERIGNORE_TRIGGER,
 } from "../src/patch-merger.ts";
 
 const line = (obj) => `${PATCH_ENTRY_LINE_PREFIX}${JSON.stringify(obj)}\n`;
@@ -56,27 +57,19 @@ describe("makePatchEntry", () => {
     });
   });
 
-  test("carries path only when given", () => {
+  test("nested .dockerignore targets keep the lane directory on target", () => {
     expect(
       makePatchEntry({
-        target: ".dockerignore",
+        target: "backend/typescript/.dockerignore",
         content: "# trigger",
         section: "DOCKERIGNORE_TYPESCRIPT",
-        path: "backend/typescript/",
       }),
     ).toEqual({
       kind: "patch",
-      target: ".dockerignore",
+      target: "backend/typescript/.dockerignore",
       content: "# trigger",
       section: "DOCKERIGNORE_TYPESCRIPT",
-      path: "backend/typescript/",
     });
-  });
-
-  test("rejects non-string content", () => {
-    expect(() => makePatchEntry({ target: ".env", content: 42 })).toThrow(
-      /must be a non-empty string/,
-    );
   });
 
   test("rejects empty content", () => {
@@ -131,14 +124,6 @@ describe("formatPatchEntryLine / parsePatchEntryLine", () => {
         line({ kind: "patch", target: "a", content: "b", section: 5 }),
       ),
     ).toThrow(/invalid patch entry section/);
-  });
-
-  test("rejects a non-string path", () => {
-    expect(() =>
-      parsePatchEntryLine(
-        line({ kind: "patch", target: "a", content: "b", path: 5 }),
-      ),
-    ).toThrow(/invalid patch entry path/);
   });
 
   test("rejects an unexpected key on the frozen shape", () => {
@@ -223,5 +208,35 @@ describe("PatchMerger — in-memory apply via an injected writer", () => {
     const written = await merger.apply("/root");
     expect(written).toEqual([]);
     expect(writes).toHaveLength(0);
+  });
+
+  test("nested .dockerignore pieces compose into the root file", async () => {
+    const writes = [];
+    const merger = new PatchMerger({
+      writeTextFile: async (path, content) => {
+        writes.push({ path, content });
+      },
+    });
+    merger.register(
+      makePatchEntry({
+        target: "backend/typescript/.dockerignore",
+        content: DOCKERIGNORE_TRIGGER,
+        section: "DOCKERIGNORE_TYPESCRIPT",
+      }),
+    );
+    merger.register(
+      makePatchEntry({
+        target: "backend/rust/.dockerignore",
+        content: DOCKERIGNORE_TRIGGER,
+        section: "DOCKERIGNORE_RUST",
+      }),
+    );
+    const written = await merger.apply("/root");
+    expect(written).toEqual([".dockerignore"]);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].path.endsWith(".dockerignore")).toBe(true);
+    expect(writes[0].path.includes("typescript")).toBe(false);
+    expect(writes[0].content).toContain("backend/typescript/node_modules");
+    expect(writes[0].content).toContain("backend/rust/target");
   });
 });

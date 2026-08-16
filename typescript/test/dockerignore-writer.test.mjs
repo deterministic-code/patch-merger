@@ -11,14 +11,13 @@ function ignore(laneLines) {
   return `${[...COMMON, ...laneLines].sort().join("\n")}\n`;
 }
 
-// Each lane's producer stamps its resolved output dir onto the piece's `path`; the writer just prefixes that lane's artifacts with it — it no longer computes layout.
+// Each lane's producer stamps the ignore file under its output dir; the writer prefixes that lane's artifacts with the directory on `target`.
 function compose(lanes, applicationTier) {
-  const pieces = lanes.map(({ language, path }) => ({
+  const pieces = lanes.map(({ language, dir }) => ({
     kind: "patch",
-    target: ".dockerignore",
+    target: `${dir ?? ""}.dockerignore`,
     content: "# managed by dockerignore-writer",
     section: `DOCKERIGNORE_${language.toUpperCase()}`,
-    ...(path === undefined ? {} : { path }),
   }));
   return composePatchTarget({
     target: ".dockerignore",
@@ -27,21 +26,21 @@ function compose(lanes, applicationTier) {
   });
 }
 
-describe("dockerignore writer — prefixes each lane's artifacts with the piece path", () => {
+describe("dockerignore writer — prefixes each lane's artifacts with the directory on target", () => {
   const cases = [
     {
       lanes: [{ language: "typescript" }],
       lines: ["node_modules", "dist", ".test"],
     },
-    { lanes: [{ language: "rust", path: "" }], lines: ["target"] },
+    { lanes: [{ language: "rust", dir: "" }], lines: ["target"] },
     {
-      lanes: [{ language: "csharp", path: "" }],
+      lanes: [{ language: "csharp", dir: "" }],
       lines: ["bin", "obj", "out", "publish"],
     },
     {
       lanes: [
-        { language: "typescript", path: "typescript/" },
-        { language: "rust", path: "rust/" },
+        { language: "typescript", dir: "typescript/" },
+        { language: "rust", dir: "rust/" },
       ],
       lines: [
         "typescript/node_modules",
@@ -52,8 +51,8 @@ describe("dockerignore writer — prefixes each lane's artifacts with the piece 
     },
     {
       lanes: [
-        { language: "typescript", path: "backend/typescript/" },
-        { language: "csharp", path: "backend/csharp/" },
+        { language: "typescript", dir: "backend/typescript/" },
+        { language: "csharp", dir: "backend/csharp/" },
       ],
       lines: [
         "backend/typescript/node_modules",
@@ -67,8 +66,8 @@ describe("dockerignore writer — prefixes each lane's artifacts with the piece 
     },
   ];
   for (const { lanes, lines } of cases) {
-    const label = lanes.map((l) => `${l.language}@${l.path ?? ""}`).join("+");
-    it(`[${label}] prefixes with the piece path`, () => {
+    const label = lanes.map((l) => `${l.language}@${l.dir ?? ""}`).join("+");
+    it(`[${label}] prefixes with the directory on target`, () => {
       expect(compose(lanes, "backend")).toBe(ignore(lines));
     });
   }
@@ -77,7 +76,7 @@ describe("dockerignore writer — prefixes each lane's artifacts with the piece 
 describe("dockerignore writer — full-stack tier always ignores frontend/", () => {
   it("adds the frontend lane from settings.applicationTier, not from any piece", () => {
     expect(
-      compose([{ language: "typescript", path: "backend/" }], "full-stack"),
+      compose([{ language: "typescript", dir: "backend/" }], "full-stack"),
     ).toBe(
       ignore([
         "backend/node_modules",
@@ -101,7 +100,7 @@ describe("dockerignore writer — robustness", () => {
     ).toBe(null);
   });
 
-  it("identifies the lane from the piece section, defaulting an absent path to root", () => {
+  it("identifies the lane from the piece section, defaulting a root target to unprefixed ignores", () => {
     const pieces = [
       {
         kind: "patch",

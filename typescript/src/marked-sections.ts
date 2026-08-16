@@ -11,7 +11,7 @@ function dedentBlock(block: string): string {
   let minIndent = Infinity;
   for (const line of lines) {
     if (line.length === 0) continue;
-    const leading = line.match(/^[ \t]*/)![0].length;
+    const leading = line.match(/^[ \t]*/)?.[0]?.length ?? 0;
     if (leading < line.length && leading < minIndent) minIndent = leading;
   }
   if (!Number.isFinite(minIndent) || minIndent === 0) return block;
@@ -42,17 +42,16 @@ export function sectionMarkerLines(
 ): { start: string; end: string } | null {
   const begin = content.match(
     new RegExp(`^.*===\\s*BEGIN\\s+${escapeRegExp(section)}\\b.*$`, "m"),
-  );
+  )?.[0];
   const end = content.match(
     new RegExp(`^.*===\\s*END\\s+${escapeRegExp(section)}\\b.*$`, "m"),
-  );
-  return begin && end ? { start: begin[0], end: end[0] } : null;
+  )?.[0];
+  return begin && end ? { start: begin, end } : null;
 }
 
 /** The first `=== BEGIN <id>` marker line in `content`, or null when none — the generic anchor for insertion writers (the Dockerfile COPY inserter) that target the leading marked region. */
 export function firstSectionMarkerStart(content: string): string | null {
-  const m = content.match(/^.*===\s*BEGIN\s+\S+.*$/m);
-  return m ? m[0] : null;
+  return content.match(/^.*===\s*BEGIN\s+\S+.*$/m)?.[0] ?? null;
 }
 
 export interface ReplaceMarkedBlockArgs {

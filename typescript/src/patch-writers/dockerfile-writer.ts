@@ -1,5 +1,5 @@
 import { applyDockerfileCopies } from "./dockerfile-copy-writer.ts";
-import { applyMarkedFills } from "./marked-block-writer.ts";
+import { applyMarkedFills, isSectionPiece } from "./marked-block-writer.ts";
 
 interface Piece {
   content: string;
@@ -18,8 +18,5 @@ export function dockerfileWriter(pieces: Piece[]): string | null {
   if (!skeleton) return null;
   const copyPieces = noSection.filter((p) => p !== skeleton);
   const withCopies = applyDockerfileCopies(skeleton.content, copyPieces);
-  return applyMarkedFills(
-    withCopies,
-    pieces.filter((p) => p.section),
-  );
+  return applyMarkedFills(withCopies, pieces.filter(isSectionPiece));
 }

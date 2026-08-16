@@ -1,6 +1,6 @@
 # @deterministic-code/patch-merger
 
-A standalone patch-merge engine for code generators. Emitters hand it **dumb, self-identifying patch entries** — `{ target, content, section?, path? }` — and a single **filename-keyed patch writer** per target composes the final file. No key the writer dispatches on: the filename picks the writer, and the writer owns every "how".
+A standalone patch-merge engine for code generators. Emitters hand it **dumb, self-identifying patch entries** — `{ target, content, section? }` — and a single **filename-keyed patch writer** per target composes the final file. No key the writer dispatches on: the filename picks the writer, and the writer owns every "how".
 
 ## Why
 
@@ -14,7 +14,7 @@ A codegen run has many emitters contributing to the same shared files — `packa
 | `package.json` | `packageJsonMergeWriter` | deep JSON merge |
 | `Cargo.toml` | `cargoTomlWriter` | base + marked blocks |
 | `Dockerfile` | `dockerfileWriter` | COPY insertion + marked blocks |
-| `.dockerignore` | `dockerignoreWriter` | per-lane ignores prefixed by the piece's `path` |
+| `.dockerignore` | `dockerignoreWriter` | per-lane ignores prefixed by the directory on `target` |
 | `mod.rs` / `lib.rs` | `modRsWriter` / `libRsWriter` | union of module/use blocks |
 | `app.ts` / `test-app.ts` / `entrypoint.sh` / `.csproj` | `markedBlockWriter` | fill named marker regions |
 
