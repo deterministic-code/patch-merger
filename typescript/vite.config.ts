@@ -21,6 +21,7 @@ export default defineConfig({
       fileName: (format, entryName) =>
         format === "es" ? `${entryName}.js` : `${entryName}.cjs`,
     },
+    outDir: resolve(__dirname, "dist"),
     sourcemap: true,
     rollupOptions: {
       external: [/^node:/],
@@ -28,8 +29,12 @@ export default defineConfig({
   },
   plugins: [
     dts({
-      include: ["src"],
-      exclude: ["src/**/*.test.ts", "src/**/__tests__/**"],
+      include: [resolve(__dirname, "src")],
+      exclude: [
+        resolve(__dirname, "src/**/*.test.ts"),
+        resolve(__dirname, "src/**/__tests__/**"),
+      ],
+      tsconfigPath: resolve(__dirname, "tsconfig.json"),
       rollupTypes: true,
     }),
   ],
