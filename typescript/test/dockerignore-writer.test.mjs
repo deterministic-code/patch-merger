@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   composePatchTarget,
   isPatchTarget,
-} from "../src/patch-merger.ts";
+} from "../src/patch-writers/registry.ts";
 
 const COMMON = ["*.db", "*.log", "*.sqlite", "*.sqlite3", ".env.local", ".git"];
 
@@ -12,9 +12,8 @@ function ignore(laneLines) {
 }
 
 // Each lane's producer stamps the ignore file under its output dir; the writer prefixes that lane's artifacts with the directory on `target`.
-function compose(lanes, applicationTier) {
+function compose(lanes) {
   const pieces = lanes.map(({ language, dir }) => ({
-    kind: "patch",
     target: `${dir ?? ""}.dockerignore`,
     content: "# managed by dockerignore-writer",
     section: `DOCKERIGNORE_${language.toUpperCase()}`,
@@ -22,7 +21,6 @@ function compose(lanes, applicationTier) {
   return composePatchTarget({
     target: ".dockerignore",
     pieces,
-    settings: applicationTier === undefined ? undefined : { applicationTier },
   });
 }
 
@@ -68,25 +66,9 @@ describe("dockerignore writer — prefixes each lane's artifacts with the direct
   for (const { lanes, lines } of cases) {
     const label = lanes.map((l) => `${l.language}@${l.dir ?? ""}`).join("+");
     it(`[${label}] prefixes with the directory on target`, () => {
-      expect(compose(lanes, "backend")).toBe(ignore(lines));
+      expect(compose(lanes)).toBe(ignore(lines));
     });
   }
-});
-
-describe("dockerignore writer — full-stack tier always ignores frontend/", () => {
-  it("adds the frontend lane from settings.applicationTier, not from any piece", () => {
-    expect(
-      compose([{ language: "typescript", dir: "backend/" }], "full-stack"),
-    ).toBe(
-      ignore([
-        "backend/node_modules",
-        "backend/dist",
-        "backend/.test",
-        "frontend/node_modules",
-        "frontend/dist",
-      ]),
-    );
-  });
 });
 
 describe("dockerignore writer — robustness", () => {
@@ -96,14 +78,13 @@ describe("dockerignore writer — robustness", () => {
 
   it("returns null with no pieces (writer never materializes an empty file)", () => {
     expect(
-      composePatchTarget({ target: ".dockerignore", pieces: [], settings: {} }),
+      composePatchTarget({ target: ".dockerignore", pieces: [] }),
     ).toBe(null);
   });
 
   it("identifies the lane from the piece section, defaulting a root target to unprefixed ignores", () => {
     const pieces = [
       {
-        kind: "patch",
         target: ".dockerignore",
         content: "# managed",
         section: "DOCKERIGNORE_RUST",
@@ -113,7 +94,6 @@ describe("dockerignore writer — robustness", () => {
       composePatchTarget({
         target: ".dockerignore",
         pieces,
-        settings: undefined,
       }),
     ).toBe(ignore(["target"]));
   });

@@ -5,25 +5,22 @@ export class MarkedSectionMissingError extends Error {
   }
 }
 
-function dedentBlock(block: string): string {
-  if (block.length === 0) return block;
-  const lines = block.split("\n");
+export function indentBody(block: string, indent: string): string {
+  const trimmedBlock = block.endsWith("\n") ? block.slice(0, -1) : block;
+  if (trimmedBlock.length === 0) return "";
+  const lines = trimmedBlock.split("\n");
   let minIndent = Infinity;
   for (const line of lines) {
     if (line.length === 0) continue;
     const leading = line.match(/^[ \t]*/)?.[0]?.length ?? 0;
     if (leading < line.length && leading < minIndent) minIndent = leading;
   }
-  if (!Number.isFinite(minIndent) || minIndent === 0) return block;
-  return lines
-    .map((line) => (line.length === 0 ? "" : line.slice(minIndent)))
-    .join("\n");
-}
-
-/** Dedent a block to its common leading whitespace, then re-indent every non-empty line by `indent`. Trailing newline is dropped so callers control block separation. Shared by the marked-block replacer and the shared-append composer. */
-export function indentBody(block: string, indent: string): string {
-  const trimmedBlock = block.endsWith("\n") ? block.slice(0, -1) : block;
-  const dedented = dedentBlock(trimmedBlock);
+  const dedented =
+    !Number.isFinite(minIndent) || minIndent === 0
+      ? trimmedBlock
+      : lines
+          .map((line) => (line.length === 0 ? "" : line.slice(minIndent)))
+          .join("\n");
   if (dedented.length === 0) return "";
   return dedented
     .split("\n")
@@ -35,7 +32,6 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** The generic marked-block convention: a region for `section` is delimited by the line containing `=== BEGIN <section>` and the line containing `=== END <section>`, whatever the host language's comment syntax. Returns the full marker lines (the exact strings `replaceMarkedBlockText` needs), or null when the section is absent. The specific section vocabulary lives with the emitters that stamp the markers, not here. */
 export function sectionMarkerLines(
   content: string,
   section: string,
@@ -49,24 +45,17 @@ export function sectionMarkerLines(
   return begin && end ? { start: begin, end } : null;
 }
 
-/** The first `=== BEGIN <id>` marker line in `content`, or null when none — the generic anchor for insertion writers (the Dockerfile COPY inserter) that target the leading marked region. */
-export function firstSectionMarkerStart(content: string): string | null {
-  return content.match(/^.*===\s*BEGIN\s+\S+.*$/m)?.[0] ?? null;
-}
-
-export interface ReplaceMarkedBlockArgs {
-  original: string;
-  startMarker: string;
-  endMarker: string;
-  block: string;
-}
-
 export function replaceMarkedBlockText({
   original,
   startMarker,
   endMarker,
   block,
-}: ReplaceMarkedBlockArgs): string {
+}: {
+  original: string;
+  startMarker: string;
+  endMarker: string;
+  block: string;
+}): string {
   const startIdx = original.indexOf(startMarker);
   const endIdx = original.indexOf(endMarker);
   if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
@@ -76,10 +65,8 @@ export function replaceMarkedBlockText({
   }
   const before = original.slice(0, startIdx + startMarker.length);
   const after = original.slice(endIdx);
-  const lineStart = original.lastIndexOf("\n", startIdx) + 1;
-  const indent = original.slice(lineStart, startIdx);
-  const indentedBody = indentBody(block, indent);
-  const middle =
-    indentedBody.length === 0 ? `\n${indent}` : `\n${indentedBody}\n${indent}`;
+  const indent = original.slice(original.lastIndexOf("\n", startIdx) + 1, startIdx);
+  const body = indentBody(block, indent);
+  const middle = body.length === 0 ? `\n${indent}` : `\n${body}\n${indent}`;
   return `${before}${middle}${after}`;
 }

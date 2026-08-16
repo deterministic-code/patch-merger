@@ -8,6 +8,8 @@ A codegen run has many emitters contributing to the same shared files — `packa
 
 ## Registered writers
 
+Writers live in `patch-writers` and are keyed by filename (basename, or extension for project-specific names like `GeneratedApp.csproj`). Adding a target means registering a writer there; `PatchMerger` only groups pieces and writes files.
+
 | Target | Writer | Merge strategy |
 | --- | --- | --- |
 | `.env` / `.gitignore` / `docker-compose.yml` | `sharedAppendWriter` | section-keyed upsert-append |
@@ -21,19 +23,15 @@ A codegen run has many emitters contributing to the same shared files — `packa
 ## Usage
 
 ```ts
-import {
-  PatchMerger,
-  makePatchEntry,
-  assemblePatches,
-} from "@deterministic-code/patch-merger";
+import { PatchMerger, PatchEntry } from "@deterministic-code/patch-merger";
 
-const merger = new PatchMerger({ settings });
-merger.register(makePatchEntry({ target: "package.json", content: "{…}" }));
+const merger = new PatchMerger();
+merger.register(new PatchEntry({ target: "package.json", content: "{…}" }));
 await merger.apply(rootDir);
 ```
 
-Pieces can also be persisted one-file-per-entry (`PATCHES_DIR`) and composed at end-of-run with `assemblePatches({ patchesDir, outRoot })`.
+`apply(rootDir)` composes each registered target and writes it under `rootDir` (creates parent directories; marks `.sh` files executable).
 
 ## Build
 
-`vite build` → `typescript/dist` (ESM + CJS + bundled `.d.ts`). Consumed as a git dependency, the `prepare` script builds `typescript/dist` on install.
+`vite build` → `typescript/dist` (ESM + CJS + bundled `.d.ts`).

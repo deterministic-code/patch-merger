@@ -8,8 +8,6 @@ import {
 import { dockerfileWriter } from "../src/patch-writers/dockerfile-writer.ts";
 import {
   dockerignoreWriter,
-  dockerignoreSection,
-  DOCKERIGNORE_TRIGGER,
 } from "../src/patch-writers/dockerignore-writer.ts";
 import {
   applyMarkedFills,
@@ -17,8 +15,6 @@ import {
 } from "../src/patch-writers/marked-block-writer.ts";
 import {
   sharedAppendWriter,
-  conventionForTarget,
-  isSharedPatchTarget,
   SHARED_FILE_CONVENTIONS,
 } from "../src/patch-writers/shared-append-writer.ts";
 const marker = (id) => ({
@@ -30,7 +26,7 @@ const migrateDeps = marker("MIGRATE_DEPS");
 const migrateCopy = marker("MIGRATE_COPY");
 
 describe("packageJsonMergeWriter", () => {
-  const piece = (obj) => ({ kind: "patch", target: "package.json", content: JSON.stringify(obj) });
+  const piece = (obj) => ({ target: "package.json", content: JSON.stringify(obj) });
 
   test("add-if-absent merges string sections, skeleton value wins", () => {
     const out = packageJsonMergeWriter([
@@ -51,18 +47,6 @@ describe("packageJsonMergeWriter", () => {
     const pkg = JSON.parse(out);
     expect(pkg.allowScripts).toEqual({ "better-sqlite3": true });
     expect(pkg.dependencies).toEqual({ "better-sqlite3": "^13" });
-  });
-
-  test("rejects a non-object piece", () => {
-    expect(() => packageJsonMergeWriter([{ kind: "patch", target: "package.json", content: "42" }])).toThrow(
-      /package\.json piece content must be a JSON object/,
-    );
-  });
-
-  test("rejects a non-string value in a string section", () => {
-    expect(() => packageJsonMergeWriter([piece({ scripts: { build: 1 } })])).toThrow(
-      /package\.json piece content must be a JSON object/,
-    );
   });
 });
 
@@ -127,20 +111,20 @@ describe("insertDockerfileCopies", () => {
     expect(out).toContain("COPY first first\nCOPY a b");
   });
 
-  test("no markers and no COPY line → throws template-drift error", () => {
+  test("no markers and no COPY line → throws", () => {
     expect(() =>
       insertDockerfileCopies("FROM x\nRUN build\n", [{ src: "a", dest: "b" }]),
-    ).toThrow(/template drift/);
+    ).toThrow(/neither the anchor section's markers nor a COPY line/);
   });
 });
 
 describe("applyDockerfileCopies", () => {
-  test("missing WORKDIR line → throws template-drift error", () => {
+  test("missing WORKDIR line → throws", () => {
     expect(() =>
       applyDockerfileCopies("FROM x\nCOPY a b\n", [
         { content: JSON.stringify([{ src: "s", dest: "d" }]) },
       ]),
-    ).toThrow(/missing the expected `WORKDIR` line/);
+    ).toThrow(/missing a `WORKDIR` line/);
   });
 
   const copyWithWorkdir = (workdir) =>
@@ -202,61 +186,52 @@ describe("dockerfileWriter", () => {
 
 describe("dockerignoreWriter", () => {
   test("no pieces → null", () => {
-    expect(dockerignoreWriter([], {})).toBe(null);
+    expect(dockerignoreWriter([])).toBe(null);
   });
 
-  test("settings-less assemble derives lane from a trigger piece's section; unknown lane is skipped", () => {
-    const out = dockerignoreWriter(
-      [
-        { target: ".dockerignore", content: DOCKERIGNORE_TRIGGER },
-        {
-          target: ".dockerignore",
-          content: DOCKERIGNORE_TRIGGER,
-          section: dockerignoreSection("python"),
-        },
-      ],
-      undefined,
-    );
+  test("derives lane from a trigger piece's section; unknown lane is skipped", () => {
+    const out = dockerignoreWriter([
+      { target: ".dockerignore", content: "#" },
+      {
+        target: ".dockerignore",
+        content: "#",
+        section: "DOCKERIGNORE_PYTHON",
+      },
+    ]);
     expect(out).toContain(".git");
     expect(out).toContain("*.sqlite");
     expect(out).not.toContain("python");
   });
 
   test("declared single language emits that lane's flat ignores", () => {
-    const out = dockerignoreWriter(
-      [
-        {
-          target: ".dockerignore",
-          content: DOCKERIGNORE_TRIGGER,
-          section: dockerignoreSection("typescript"),
-        },
-      ],
-      { backend: { languages: ["typescript"] } },
-    );
+    const out = dockerignoreWriter([
+      {
+        target: ".dockerignore",
+        content: "#",
+        section: "DOCKERIGNORE_TYPESCRIPT",
+      },
+    ]);
     expect(out).toContain("node_modules");
     expect(out).toContain("dist");
     expect(out).not.toContain("backend/");
   });
 
-  test("prefixes each lane with the directory on target and adds frontend ignores in full-stack", () => {
-    const out = dockerignoreWriter(
-      [
-        {
-          target: "backend/typescript/.dockerignore",
-          content: DOCKERIGNORE_TRIGGER,
-          section: dockerignoreSection("typescript"),
-        },
-        {
-          target: "backend/rust/.dockerignore",
-          content: DOCKERIGNORE_TRIGGER,
-          section: dockerignoreSection("rust"),
-        },
-      ],
-      { applicationTier: "full-stack" },
-    );
+  test("prefixes each lane with the directory on target", () => {
+    const out = dockerignoreWriter([
+      {
+        target: "backend/typescript/.dockerignore",
+        content: "#",
+        section: "DOCKERIGNORE_TYPESCRIPT",
+      },
+      {
+        target: "backend/rust/.dockerignore",
+        content: "#",
+        section: "DOCKERIGNORE_RUST",
+      },
+    ]);
     expect(out).toContain("backend/typescript/node_modules");
     expect(out).toContain("backend/rust/target");
-    expect(out).toContain("frontend/node_modules");
+    expect(out).not.toContain("frontend/");
   });
 });
 
@@ -282,20 +257,6 @@ describe("applyMarkedFills / markedBlockWriter", () => {
     expect(out).toContain("filled");
     expect(out).toContain("head");
     expect(out).toContain("tail");
-  });
-});
-
-describe("shared-append-writer helpers", () => {
-  test("conventionForTarget keys on basename, unknown → null", () => {
-    expect(conventionForTarget("rust/.env")).toEqual(
-      SHARED_FILE_CONVENTIONS[".env"],
-    );
-    expect(conventionForTarget("some/other.txt")).toBe(null);
-  });
-
-  test("isSharedPatchTarget reflects convention presence", () => {
-    expect(isSharedPatchTarget("a/.gitignore")).toBe(true);
-    expect(isSharedPatchTarget("a/random.md")).toBe(false);
   });
 });
 
