@@ -1,4 +1,4 @@
-import { indentBody } from "../marked-sections.ts";
+import { indentBody } from "../common/marked-sections.ts";
 
 interface SharedFileConvention {
   skeleton: string;
@@ -26,24 +26,25 @@ export const SHARED_FILE_CONVENTIONS = {
   ".env": ENV,
   ".env.example": ENV,
   ".gitignore": { skeleton: ".env\n", indent: "", sectionPrefix: "GITIGNORE" },
+  ".dockerignore": {
+    skeleton: ".git\n.env.local\n*.log\n*.sqlite\n*.sqlite3\n*.db\n",
+    indent: "",
+    sectionPrefix: "DOCKERIGNORE",
+  },
 };
 
-export function sharedAppendWriter(
-  convention: SharedFileConvention,
-): (pieces: Piece[]) => string | null {
-  const ownerPrefix = `${convention.sectionPrefix}_`;
+export function sharedAppendWriter({
+  skeleton,
+  indent,
+  sectionPrefix,
+}: SharedFileConvention): (pieces: Piece[]) => string | null {
   return (pieces) => {
-    if (!pieces.some((p) => p.section?.startsWith(ownerPrefix))) return null;
-    const bySection = new Map<string | undefined, string>();
-    for (const p of pieces) bySection.set(p.section, p.content);
-    const blocks = [...bySection.values()]
-      .map((content) => indentBody(content, convention.indent))
-      .filter((b) => b.length > 0);
-    if (blocks.length === 0) return convention.skeleton;
-    const base =
-      convention.skeleton.length === 0 || convention.skeleton.endsWith("\n")
-        ? convention.skeleton
-        : `${convention.skeleton}\n`;
+    if (!pieces.some((p) => p.section?.startsWith(`${sectionPrefix}_`))) return null;
+    const blocks = [...new Map(pieces.map((p) => [p.section, p.content])).values()]
+      .map((c) => indentBody(c, indent))
+      .filter(Boolean);
+    if (blocks.length === 0) return skeleton;
+    const base = skeleton && !skeleton.endsWith("\n") ? `${skeleton}\n` : skeleton;
     return `${base}${blocks.join("\n\n")}\n`;
   };
 }

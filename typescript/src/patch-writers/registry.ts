@@ -8,7 +8,6 @@ import { cargoTomlWriter } from "./cargo-toml-writer.ts";
 import { dockerfileWriter } from "./dockerfile-writer.ts";
 import { modRsWriter } from "./mod-rs-writer.ts";
 import { libRsWriter } from "./lib-rs-writer.ts";
-import { dockerignoreWriter } from "./dockerignore-writer.ts";
 
 type WriterPiece = {
   target: string;
@@ -34,7 +33,6 @@ const WRITERS = new Map<string, PatchWriter>([
   [".csproj", markedBlockWriter],
   ["mod.rs", modRsWriter],
   ["lib.rs", libRsWriter],
-  [".dockerignore", dockerignoreWriter],
 ]);
 
 function patchWriterFor(target: string): PatchWriter | null {

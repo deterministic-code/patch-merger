@@ -3,7 +3,7 @@ import {
   MarkedSectionMissingError,
   indentBody,
   replaceMarkedBlockText,
-} from "../src/marked-sections.ts";
+} from "../src/common/marked-sections.ts";
 
 describe("MarkedSectionMissingError", () => {
   test("carries its own name so callers can instanceof-narrow it", () => {
@@ -46,12 +46,7 @@ describe("replaceMarkedBlockText", () => {
 
   test("replaces the region between markers, preserving the start-line indent", () => {
     const original = `pre\n    ${START}\nold\n    ${END}\npost`;
-    const out = replaceMarkedBlockText({
-      original,
-      startMarker: START,
-      endMarker: END,
-      block: "new line",
-    });
+    const out = replaceMarkedBlockText(original, START, END, "new line");
     expect(out).toContain(`${START}\n    new line\n    ${END}`);
     expect(out).toContain("pre\n");
     expect(out).toContain("post");
@@ -59,35 +54,20 @@ describe("replaceMarkedBlockText", () => {
 
   test("an empty block collapses the region to just the markers", () => {
     const original = `${START}\nold\n${END}`;
-    const out = replaceMarkedBlockText({
-      original,
-      startMarker: START,
-      endMarker: END,
-      block: "",
-    });
+    const out = replaceMarkedBlockText(original, START, END, "");
     expect(out).toBe(`${START}\n${END}`);
   });
 
   test("throws MarkedSectionMissingError when a marker is absent", () => {
     expect(() =>
-      replaceMarkedBlockText({
-        original: "no markers here",
-        startMarker: START,
-        endMarker: END,
-        block: "x",
-      }),
+      replaceMarkedBlockText("no markers here", START, END, "x"),
     ).toThrow(MarkedSectionMissingError);
   });
 
   test("throws when the end marker precedes the start marker", () => {
     const original = `${END}\nbody\n${START}`;
     expect(() =>
-      replaceMarkedBlockText({
-        original,
-        startMarker: START,
-        endMarker: END,
-        block: "x",
-      }),
+      replaceMarkedBlockText(original, START, END, "x"),
     ).toThrow(/absent or out of order/);
   });
 });

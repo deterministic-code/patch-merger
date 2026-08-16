@@ -7,9 +7,6 @@ import {
 } from "../src/patch-writers/dockerfile-copy-writer.ts";
 import { dockerfileWriter } from "../src/patch-writers/dockerfile-writer.ts";
 import {
-  dockerignoreWriter,
-} from "../src/patch-writers/dockerignore-writer.ts";
-import {
   applyMarkedFills,
   markedBlockWriter,
 } from "../src/patch-writers/marked-block-writer.ts";
@@ -184,54 +181,38 @@ describe("dockerfileWriter", () => {
   });
 });
 
-describe("dockerignoreWriter", () => {
-  test("no pieces → null", () => {
-    expect(dockerignoreWriter([])).toBe(null);
+describe("dockerignore via sharedAppendWriter", () => {
+  const write = sharedAppendWriter(SHARED_FILE_CONVENTIONS[".dockerignore"]);
+
+  test("no owner section → null", () => {
+    expect(write([])).toBe(null);
   });
 
-  test("derives lane from a trigger piece's section; unknown lane is skipped", () => {
-    const out = dockerignoreWriter([
-      { target: ".dockerignore", content: "#" },
+  test("owner section appends piece content after the common skeleton", () => {
+    const out = write([
       {
-        target: ".dockerignore",
-        content: "#",
-        section: "DOCKERIGNORE_PYTHON",
+        content: "node_modules\ndist",
+        section: "DOCKERIGNORE_TYPESCRIPT",
       },
     ]);
     expect(out).toContain(".git");
-    expect(out).toContain("*.sqlite");
-    expect(out).not.toContain("python");
-  });
-
-  test("declared single language emits that lane's flat ignores", () => {
-    const out = dockerignoreWriter([
-      {
-        target: ".dockerignore",
-        content: "#",
-        section: "DOCKERIGNORE_TYPESCRIPT",
-      },
-    ]);
     expect(out).toContain("node_modules");
     expect(out).toContain("dist");
-    expect(out).not.toContain("backend/");
   });
 
-  test("prefixes each lane with the directory on target", () => {
-    const out = dockerignoreWriter([
+  test("nested path prefixes live in the piece content, not the writer", () => {
+    const out = write([
       {
-        target: "backend/typescript/.dockerignore",
-        content: "#",
+        content: "backend/typescript/node_modules",
         section: "DOCKERIGNORE_TYPESCRIPT",
       },
       {
-        target: "backend/rust/.dockerignore",
-        content: "#",
+        content: "backend/rust/target",
         section: "DOCKERIGNORE_RUST",
       },
     ]);
     expect(out).toContain("backend/typescript/node_modules");
     expect(out).toContain("backend/rust/target");
-    expect(out).not.toContain("frontend/");
   });
 });
 

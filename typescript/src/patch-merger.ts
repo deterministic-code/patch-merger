@@ -5,11 +5,15 @@ import {
   composePatchTarget,
   isPatchTarget,
 } from "./patch-writers/registry.ts";
-import { outputTarget } from "./patch-writers/dockerignore-writer.ts";
 
 export { PatchEntry };
 
 type IWriter = (path: string, content: string) => Promise<void>;
+
+function outputTarget(target: string): string {
+  const base = target.slice(target.lastIndexOf("/") + 1);
+  return base === ".dockerignore" ? ".dockerignore" : target;
+}
 
 async function defaultWriter(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
