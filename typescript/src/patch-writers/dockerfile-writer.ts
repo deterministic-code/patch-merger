@@ -6,13 +6,9 @@ interface Piece {
   section?: string;
 }
 
-function isDockerfileBody(content: string): boolean {
-  return /^FROM\s/m.test(content);
-}
-
 export function dockerfileWriter(pieces: Piece[]): string | null {
   const noSection = pieces.filter((p) => !p.section);
-  const skeleton = noSection.find((p) => isDockerfileBody(p.content));
+  const skeleton = noSection.find((p) => /^FROM\s/m.test(p.content));
   if (!skeleton) return null;
   const withCopies = applyDockerfileCopies(
     skeleton.content,

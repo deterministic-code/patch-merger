@@ -2,15 +2,14 @@ import { describe, test, expect } from "vitest";
 import {
   PatchMerger,
   isPatchTarget,
-  patchWriterFor,
   composePatchTarget,
   makePatchEntry,
   formatPatchEntryLine,
   parsePatchEntryLine,
-  patchPieceFilename,
   PATCH_ENTRY_LINE_PREFIX,
-  DOCKERIGNORE_TRIGGER,
 } from "../src/patch-merger.ts";
+import { patchWriterFor } from "../src/patch-writers/registry.ts";
+import { DOCKERIGNORE_TRIGGER } from "../src/patch-writers/dockerignore-writer.ts";
 
 const line = (obj) => `${PATCH_ENTRY_LINE_PREFIX}${JSON.stringify(obj)}\n`;
 
@@ -143,15 +142,6 @@ describe("composePatchTarget", () => {
   });
 });
 
-describe("patchPieceFilename", () => {
-  test("zero-pads the emit index and sanitizes the target for readability", () => {
-    expect(patchPieceFilename(7, "backend/app.ts")).toBe(
-      "00007-backend_app.ts.json",
-    );
-    expect(patchPieceFilename(0, ".env")).toBe("00000-.env.json");
-  });
-});
-
 describe("PatchMerger — in-memory apply via an injected writer", () => {
   test("register rejects a target with no writer", () => {
     const merger = new PatchMerger();
@@ -160,14 +150,13 @@ describe("PatchMerger — in-memory apply via an injected writer", () => {
     ).toThrow(/no PatchWriter for target 'no.txt'/);
   });
 
-  test("hasEntries reflects registration and apply writes each composed target in emit order", async () => {
+  test("apply writes each composed target in emit order", async () => {
     const writes = [];
     const merger = new PatchMerger({
       writeTextFile: async (path, content) => {
         writes.push({ path, content });
       },
     });
-    expect(merger.hasEntries()).toBe(false);
     merger.register(
       makePatchEntry({
         target: ".env",
@@ -182,7 +171,6 @@ describe("PatchMerger — in-memory apply via an injected writer", () => {
         section: "DB_ENV",
       }),
     );
-    expect(merger.hasEntries()).toBe(true);
     const written = await merger.apply("/root");
     expect(written).toEqual([".env"]);
     expect(writes).toHaveLength(1);

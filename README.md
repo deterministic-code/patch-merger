@@ -23,20 +23,14 @@ Writers live in `patch-writers` and are keyed by filename (basename, or extensio
 ## Usage
 
 ```ts
-import {
-  PatchMerger,
-  makePatchEntry,
-  assemblePatches,
-} from "@deterministic-code/patch-merger";
+import { PatchMerger, PatchEntry } from "@deterministic-code/patch-merger";
 
 const merger = new PatchMerger({ settings });
-merger.register(makePatchEntry({ target: "package.json", content: "{…}" }));
+merger.register(new PatchEntry({ target: "package.json", content: "{…}" }));
 await merger.apply(rootDir);
 ```
 
-`makePatchEntry` builds a frozen `PatchEntry`. `apply(rootDir)` composes each registered target and writes it under `rootDir` (creates parent directories; marks `.sh` files executable).
-
-Pieces can also be persisted one-file-per-entry (`PATCHES_DIR`) and composed at end-of-run with `assemblePatches({ patchesDir, outRoot })`, which loads them into a `PatchMerger` and uses the same write path.
+`apply(rootDir)` composes each registered target and writes it under `rootDir` (creates parent directories; marks `.sh` files executable).
 
 ## Build
 

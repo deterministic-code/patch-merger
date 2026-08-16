@@ -21,35 +21,15 @@ declare type ComposeSettings = {
     applicationTier?: string;
 } | null | undefined;
 
-export declare function conventionForTarget(target: string): SharedFileConvention | null;
-
-declare interface DockerfileCopy {
-    src: string;
-    dest: string;
-    workdirRelative?: boolean;
-}
-
-export declare const DOCKERIGNORE_TRIGGER = "# the root .dockerignore is composed from settings by the dockerignore writer";
-
-export declare function dockerignoreSection(language: string): string;
-
 export declare function formatPatchEntryLine(entry: PatchEntry): string;
 
-export declare function insertDockerfileCopies(content: string, copies: DockerfileCopy[], anchorSection?: string): string;
-
 export declare function isPatchTarget(target: string): boolean;
-
-export declare function isSharedPatchTarget(target: string): boolean;
 
 export declare function makePatchEntry(args: {
     target: string;
     content: string;
     section?: string;
 }): PatchEntry;
-
-export declare class MarkedSectionMissingError extends Error {
-    constructor(message: string);
-}
 
 export declare function parsePatchEntryLine(line: string): PatchEntry | null;
 
@@ -66,9 +46,8 @@ export declare class PatchEntry {
         section?: string;
     });
     static parse(value: unknown): PatchEntry;
+    static readDir(dir: string): Promise<PatchEntry[]>;
 }
-
-export declare const PATCHES_DIR = "deterministic/patches";
 
 export declare class PatchMerger {
     writeTextFile: WriteTextFile;
@@ -79,27 +58,7 @@ export declare class PatchMerger {
         settings?: ComposeSettings;
     });
     register(entry: PatchEntry): void;
-    hasEntries(): boolean;
     apply(rootDir: string): Promise<string[]>;
-}
-
-export declare function patchPieceFilename(index: number, target: string): string;
-
-declare type PatchWriter = (pieces: WriterPiece[], settings?: ComposeSettings) => string | null;
-
-export declare function patchWriterFor(target: string): PatchWriter | null;
-
-export declare function replaceMarkedBlockText({ original, startMarker, endMarker, block, }: {
-    original: string;
-    startMarker: string;
-    endMarker: string;
-    block: string;
-}): string;
-
-declare interface SharedFileConvention {
-    skeleton: string;
-    indent: string;
-    sectionPrefix: string;
 }
 
 declare type WriterPiece = {

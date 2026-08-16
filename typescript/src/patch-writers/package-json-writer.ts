@@ -42,26 +42,27 @@ function isMapOf(
   return true;
 }
 
-function isPackageJson(value: unknown): value is PackageJson {
-  if (!isRecord(value)) return false;
-  if (value.name !== undefined && typeof value.name !== "string") return false;
+function parsePackageJson(text: string): PackageJson {
+  const value = parseJson(text);
+  if (!isRecord(value)) {
+    throw new Error("package.json piece content must be a JSON object");
+  }
+  if (value.name !== undefined && typeof value.name !== "string") {
+    throw new Error("package.json piece content must be a JSON object");
+  }
   for (const section of STRING_MAP_SECTIONS) {
     const v = value[section];
-    if (v !== undefined && !isMapOf(v, "string")) return false;
+    if (v !== undefined && !isMapOf(v, "string")) {
+      throw new Error("package.json piece content must be a JSON object");
+    }
   }
   for (const section of BOOLEAN_MAP_SECTIONS) {
     const v = value[section];
-    if (v !== undefined && !isMapOf(v, "boolean")) return false;
+    if (v !== undefined && !isMapOf(v, "boolean")) {
+      throw new Error("package.json piece content must be a JSON object");
+    }
   }
-  return true;
-}
-
-function parsePackageJson(text: string): PackageJson {
-  const value = parseJson(text);
-  if (!isPackageJson(value)) {
-    throw new Error("package.json piece content must be a JSON object");
-  }
-  return value;
+  return value as PackageJson;
 }
 
 export function packageJsonMergeWriter(pieces: Piece[]): string {

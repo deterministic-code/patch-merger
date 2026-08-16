@@ -32,16 +32,6 @@ export type ComposeSettings =
   | null
   | undefined;
 
-function laneLanguage(section: string | undefined): string | null {
-  const language = DOCKERIGNORE_SECTION.exec(section ?? "")?.[1];
-  return language ? language.toLowerCase() : null;
-}
-
-function dirPrefix(target: string): string {
-  const slash = target.lastIndexOf("/");
-  return slash === -1 ? "" : target.slice(0, slash + 1);
-}
-
 export function dockerignoreWriter(
   pieces: Piece[],
   settings?: ComposeSettings,
@@ -49,14 +39,20 @@ export function dockerignoreWriter(
   if (pieces.length === 0) return null;
   const lines = new Set(COMMON_IGNORES);
   for (const piece of pieces) {
-    const language = laneLanguage(piece.section);
+    const language = DOCKERIGNORE_SECTION.exec(piece.section ?? "")?.[1]?.toLowerCase();
     const artifacts = language ? LANE_IGNORES[language] : undefined;
     if (!artifacts) continue;
-    const prefix = dirPrefix(piece.target);
+    const slash = piece.target.lastIndexOf("/");
+    const prefix = slash === -1 ? "" : piece.target.slice(0, slash + 1);
     for (const artifact of artifacts) lines.add(`${prefix}${artifact}`);
   }
   if (settings?.applicationTier === "full-stack") {
     for (const artifact of FRONTEND_IGNORES) lines.add(`frontend/${artifact}`);
   }
   return `${[...lines].sort().join("\n")}\n`;
+}
+
+export function outputTarget(target: string): string {
+  const base = target.slice(target.lastIndexOf("/") + 1);
+  return base === ".dockerignore" ? ".dockerignore" : target;
 }

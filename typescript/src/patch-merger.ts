@@ -1,28 +1,14 @@
-import { readFile, writeFile, mkdir, readdir, chmod } from "node:fs/promises";
+import { writeFile, mkdir, chmod } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { isNodeError, parseJson } from "./json.ts";
 import { PatchEntry } from "./patch-entry.ts";
 import {
   composePatchTarget,
   isPatchTarget,
-  outputTarget,
   type ComposeSettings,
-} from "./patch-writers/index.ts";
+} from "./patch-writers/registry.ts";
+import { outputTarget } from "./patch-writers/dockerignore-writer.ts";
 
-export {
-  MarkedSectionMissingError,
-  replaceMarkedBlockText,
-} from "./marked-sections.ts";
-export {
-  composePatchTarget,
-  conventionForTarget,
-  DOCKERIGNORE_TRIGGER,
-  dockerignoreSection,
-  insertDockerfileCopies,
-  isPatchTarget,
-  isSharedPatchTarget,
-  patchWriterFor,
-} from "./patch-writers/index.ts";
+export { composePatchTarget, isPatchTarget };
 export {
   formatPatchEntryLine,
   makePatchEntry,
@@ -33,8 +19,6 @@ export {
 
 type WriteTextFile = (path: string, content: string) => Promise<void>;
 
-export const PATCHES_DIR = "deterministic/patches";
-
 async function defaultWriteTextFile(
   path: string,
   content: string,
@@ -42,24 +26,6 @@ async function defaultWriteTextFile(
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
   if (path.endsWith(".sh")) await chmod(path, 0o755);
-}
-
-function catchEnoent<T>(fallback: T) {
-  return (err: unknown): T => {
-    if (isNodeError(err) && err.code === "ENOENT") return fallback;
-    throw err;
-  };
-}
-
-function groupByTarget(entries: PatchEntry[]): Map<string, PatchEntry[]> {
-  const byTarget = new Map<string, PatchEntry[]>();
-  for (const entry of entries) {
-    const key = outputTarget(entry.target);
-    const group = byTarget.get(key);
-    if (group) group.push(entry);
-    else byTarget.set(key, [entry]);
-  }
-  return byTarget;
 }
 
 export class PatchMerger {
@@ -86,10 +52,6 @@ export class PatchMerger {
     this.entries.push(patch);
   }
 
-  hasEntries(): boolean {
-    return this.entries.length > 0;
-  }
-
   async apply(rootDir: string): Promise<string[]> {
     return (await writePatches(this, rootDir)).map((w) => w.file);
   }
@@ -99,24 +61,25 @@ async function writePatches(
   merger: PatchMerger,
   rootDir: string,
 ): Promise<{ file: string; contents: string }[]> {
+  const byTarget = new Map<string, PatchEntry[]>();
+  for (const entry of merger.entries) {
+    const key = outputTarget(entry.target);
+    const group = byTarget.get(key);
+    if (group) group.push(entry);
+    else byTarget.set(key, [entry]);
+  }
   const written: { file: string; contents: string }[] = [];
-  for (const [target, pieces] of groupByTarget(merger.entries)) {
+  for (const [target, pieces] of byTarget) {
     const contents = composePatchTarget({
       target,
       pieces,
       settings: merger.settings,
     });
     if (contents === null) continue;
-    const dest = join(rootDir, target);
-    await merger.writeTextFile(dest, contents);
+    await merger.writeTextFile(join(rootDir, target), contents);
     written.push({ file: target, contents });
   }
   return written;
-}
-
-export function patchPieceFilename(index: number, target: string): string {
-  const safe = target.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return `${String(index).padStart(5, "0")}-${safe}.json`;
 }
 
 export async function assemblePatches({
@@ -138,13 +101,8 @@ export async function assemblePatches({
     },
     settings,
   });
-  const files = (await readdir(patchesDir).catch(catchEnoent([] as string[])))
-    .filter((f) => f.endsWith(".json"))
-    .sort();
-  for (const file of files) {
-    merger.register(
-      PatchEntry.parse(parseJson(await readFile(join(patchesDir, file), "utf8"))),
-    );
+  for (const entry of await PatchEntry.readDir(patchesDir)) {
+    merger.register(entry);
   }
   return writePatches(merger, outRoot);
 }

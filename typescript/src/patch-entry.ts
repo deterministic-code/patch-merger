@@ -1,3 +1,5 @@
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { isRecord, parseJson } from "./json.ts";
 
 export const PATCH_ENTRY_LINE_PREFIX = "DETERMINISTIC_PATCH ";
@@ -58,6 +60,20 @@ export class PatchEntry {
       content: value.content,
       ...(value.section ? { section: value.section } : {}),
     });
+  }
+
+  static async readDir(dir: string): Promise<PatchEntry[]> {
+    const names = await readdir(dir).catch((err: unknown): string[] => {
+      if (isRecord(err) && err.code === "ENOENT") return [];
+      throw err;
+    });
+    const entries: PatchEntry[] = [];
+    for (const name of names.filter((f) => f.endsWith(".json")).sort()) {
+      entries.push(
+        PatchEntry.parse(parseJson(await readFile(join(dir, name), "utf8"))),
+      );
+    }
+    return entries;
   }
 }
 

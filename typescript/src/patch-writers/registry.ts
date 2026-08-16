@@ -14,15 +14,6 @@ import {
 } from "./dockerignore-writer.ts";
 
 export type { ComposeSettings };
-export {
-  DOCKERIGNORE_TRIGGER,
-  dockerignoreSection,
-} from "./dockerignore-writer.ts";
-export {
-  conventionForTarget,
-  isSharedPatchTarget,
-} from "./shared-append-writer.ts";
-export { insertDockerfileCopies } from "./dockerfile-copy-writer.ts";
 
 export type WriterPiece = {
   target: string;
@@ -54,19 +45,11 @@ const WRITERS = new Map<string, PatchWriter>([
   [".dockerignore", dockerignoreWriter],
 ]);
 
-function basename(target: string): string {
-  return target.slice(target.lastIndexOf("/") + 1);
-}
-
-// "" for dotfiles so `.dockerignore` never matches as an extension.
-function extname(target: string): string {
-  const base = basename(target);
-  const dot = base.lastIndexOf(".");
-  return dot > 0 ? base.slice(dot) : "";
-}
-
 export function patchWriterFor(target: string): PatchWriter | null {
-  return WRITERS.get(basename(target)) ?? WRITERS.get(extname(target)) ?? null;
+  const base = target.slice(target.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 ? base.slice(dot) : "";
+  return WRITERS.get(base) ?? WRITERS.get(ext) ?? null;
 }
 
 export function isPatchTarget(target: string): boolean {
@@ -85,9 +68,4 @@ export function composePatchTarget({
   const writer = patchWriterFor(target);
   if (!writer) throw new Error(`composePatchTarget: no writer for '${target}'`);
   return writer(pieces, settings);
-}
-
-// Nested `.dockerignore` pieces still compose into the root ignore file.
-export function outputTarget(target: string): string {
-  return basename(target) === ".dockerignore" ? ".dockerignore" : target;
 }

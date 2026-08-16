@@ -1,5 +1,4 @@
 import { applyMarkedFills, isSectionPiece } from "./marked-block-writer.ts";
-import { firstSectionMarkerStart } from "../marked-sections.ts";
 
 interface Piece {
   content: string;
@@ -8,8 +7,8 @@ interface Piece {
 
 export function cargoTomlWriter(pieces: Piece[]): string | null {
   const noSection = pieces.filter((p) => !p.section);
-  const skeleton = noSection.find(
-    (p) => firstSectionMarkerStart(p.content) !== null,
+  const skeleton = noSection.find((p) =>
+    /^.*===\s*BEGIN\s+\S+.*$/m.test(p.content),
   );
   if (skeleton) {
     return applyMarkedFills(skeleton.content, pieces.filter(isSectionPiece));

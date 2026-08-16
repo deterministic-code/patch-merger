@@ -5,24 +5,22 @@ export class MarkedSectionMissingError extends Error {
   }
 }
 
-function dedentBlock(block: string): string {
-  if (block.length === 0) return block;
-  const lines = block.split("\n");
+export function indentBody(block: string, indent: string): string {
+  const trimmedBlock = block.endsWith("\n") ? block.slice(0, -1) : block;
+  if (trimmedBlock.length === 0) return "";
+  const lines = trimmedBlock.split("\n");
   let minIndent = Infinity;
   for (const line of lines) {
     if (line.length === 0) continue;
     const leading = line.match(/^[ \t]*/)?.[0]?.length ?? 0;
     if (leading < line.length && leading < minIndent) minIndent = leading;
   }
-  if (!Number.isFinite(minIndent) || minIndent === 0) return block;
-  return lines
-    .map((line) => (line.length === 0 ? "" : line.slice(minIndent)))
-    .join("\n");
-}
-
-export function indentBody(block: string, indent: string): string {
-  const trimmedBlock = block.endsWith("\n") ? block.slice(0, -1) : block;
-  const dedented = dedentBlock(trimmedBlock);
+  const dedented =
+    !Number.isFinite(minIndent) || minIndent === 0
+      ? trimmedBlock
+      : lines
+          .map((line) => (line.length === 0 ? "" : line.slice(minIndent)))
+          .join("\n");
   if (dedented.length === 0) return "";
   return dedented
     .split("\n")
@@ -45,10 +43,6 @@ export function sectionMarkerLines(
     new RegExp(`^.*===\\s*END\\s+${escapeRegExp(section)}\\b.*$`, "m"),
   )?.[0];
   return begin && end ? { start: begin, end } : null;
-}
-
-export function firstSectionMarkerStart(content: string): string | null {
-  return content.match(/^.*===\s*BEGIN\s+\S+.*$/m)?.[0] ?? null;
 }
 
 export function replaceMarkedBlockText({

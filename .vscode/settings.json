@@ -1,0 +1,8 @@
+{
+  "editor.showUnused": true,
+  "javascript.showUnused": true,
+  "typescript.showUnused": true,
+  "typescript.reportStyleChecksAsWarnings": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

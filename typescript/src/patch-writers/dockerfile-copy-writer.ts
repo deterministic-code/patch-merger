@@ -39,10 +39,6 @@ function parseCopyPayload(text: string): CopyPayload {
   return payload;
 }
 
-function escapeForRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function dockerfileWorkdirPrefix(content: string): string {
   const workdir = content.match(/^WORKDIR\s+(\S+)\s*$/m)?.[1];
   if (!workdir) {
@@ -76,7 +72,13 @@ export function insertDockerfileCopies(
   if (copies.length === 0) return content;
   const additions = copies
     .map((c) => `COPY ${c.src} ${c.dest}`)
-    .filter((line) => !new RegExp(`^${escapeForRegex(line)}\\s*$`, "m").test(content));
+    .filter(
+      (line) =>
+        !new RegExp(
+          `^${line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+          "m",
+        ).test(content),
+    );
   if (additions.length === 0) return content;
   const insertAt = dockerfileCopyAnchor(content, anchorSection);
   return `${content.slice(0, insertAt)}\n${additions.join("\n")}${content.slice(insertAt)}`;
