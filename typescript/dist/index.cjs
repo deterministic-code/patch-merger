@@ -1,2 +1,0 @@
-"use strict";Object.defineProperty(exports,Symbol.toStringTag,{value:"Module"});const t=require("./patch-merger.cjs");exports.PATCH_ENTRY_LINE_PREFIX=t.PATCH_ENTRY_LINE_PREFIX;exports.PatchEntry=t.PatchEntry;exports.PatchMerger=t.PatchMerger;exports.assemblePatches=t.assemblePatches;exports.composePatchTarget=t.composePatchTarget;exports.formatPatchEntryLine=t.formatPatchEntryLine;exports.isPatchTarget=t.isPatchTarget;exports.makePatchEntry=t.makePatchEntry;exports.parsePatchEntryLine=t.parsePatchEntryLine;
-//# sourceMappingURL=index.cjs.map
