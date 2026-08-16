@@ -1,7 +1,7 @@
-import { isRecord, parseJson } from "../json.ts";
+import { parseJson } from "../json.ts";
 import { sectionMarkerLines } from "../marked-sections.ts";
 
-export interface DockerfileCopy {
+interface DockerfileCopy {
   src: string;
   dest: string;
   workdirRelative?: boolean;
@@ -12,38 +12,11 @@ interface CopyPayload {
   copies: DockerfileCopy[];
 }
 
-function parseDockerfileCopy(value: unknown): DockerfileCopy {
-  if (
-    !isRecord(value) ||
-    typeof value.src !== "string" ||
-    typeof value.dest !== "string"
-  ) {
-    throw new Error("Dockerfile COPY entry must have string src and dest");
-  }
-  const copy: DockerfileCopy = { src: value.src, dest: value.dest };
-  if (value.workdirRelative === true) copy.workdirRelative = true;
-  return copy;
-}
-
-function parseCopyPayload(text: string): CopyPayload {
-  const value = parseJson(text);
-  if (!isRecord(value) || !Array.isArray(value.copies)) {
-    throw new Error("Dockerfile COPY piece must be JSON { copies: [...] }");
-  }
-  const payload: CopyPayload = {
-    copies: value.copies.map(parseDockerfileCopy),
-  };
-  if (typeof value.anchorSection === "string") {
-    payload.anchorSection = value.anchorSection;
-  }
-  return payload;
-}
-
 function dockerfileWorkdirPrefix(content: string): string {
   const workdir = content.match(/^WORKDIR\s+(\S+)\s*$/m)?.[1];
   if (!workdir) {
     throw new Error(
-      "applyDockerfileCopies: Dockerfile is missing the expected `WORKDIR` line — create-backend-app template drift; re-run create-backend-app first.",
+      "applyDockerfileCopies: Dockerfile is missing a `WORKDIR` line",
     );
   }
   return workdir === "/app" ? "" : `${workdir.slice("/app/".length)}/`;
@@ -58,7 +31,7 @@ function dockerfileCopyAnchor(content: string, anchorSection?: string): number {
   const last = copyLines[copyLines.length - 1];
   if (last?.index === undefined) {
     throw new Error(
-      "insertDockerfileCopies: content has neither the anchor section's markers nor a COPY line to anchor after — create-backend-app template drift; re-run create-backend-app first.",
+      "insertDockerfileCopies: content has neither the anchor section's markers nor a COPY line to insert after",
     );
   }
   return last.index + last[0].length;
@@ -91,7 +64,7 @@ export function applyDockerfileCopies(
   const prefix = dockerfileWorkdirPrefix(content);
   let next = content;
   for (const patch of copyPieces) {
-    const payload = parseCopyPayload(patch.content);
+    const payload = parseJson<CopyPayload>(patch.content);
     const copies = payload.copies.map((c) =>
       c.workdirRelative ? { src: `${prefix}${c.src}`, dest: c.dest } : c,
     );

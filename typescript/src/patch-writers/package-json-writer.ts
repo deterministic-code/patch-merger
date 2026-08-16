@@ -1,8 +1,7 @@
-import { isRecord, parseJson } from "../json.ts";
+import { parseJson } from "../json.ts";
 
 interface Piece {
   content: string;
-  section?: string;
 }
 
 const STRING_MAP_SECTIONS = [
@@ -14,15 +13,10 @@ const STRING_MAP_SECTIONS = [
 
 const BOOLEAN_MAP_SECTIONS = ["allowScripts"] as const;
 
-const PACKAGE_JSON_MERGE_SECTIONS = [
-  ...STRING_MAP_SECTIONS,
-  ...BOOLEAN_MAP_SECTIONS,
-] as const;
-
 type StringMap = Record<string, string>;
 type BooleanMap = Record<string, boolean>;
 
-export interface PackageJson {
+interface PackageJson {
   name?: string;
   scripts?: StringMap;
   dependencies?: StringMap;
@@ -31,54 +25,24 @@ export interface PackageJson {
   allowScripts?: BooleanMap;
 }
 
-function isMapOf(
-  value: unknown,
-  valueType: "string" | "boolean",
-): value is Record<string, string | boolean> {
-  if (!isRecord(value)) return false;
-  for (const v of Object.values(value)) {
-    if (typeof v !== valueType) return false;
-  }
-  return true;
-}
-
-function parsePackageJson(text: string): PackageJson {
-  const value = parseJson(text);
-  if (!isRecord(value)) {
-    throw new Error("package.json piece content must be a JSON object");
-  }
-  if (value.name !== undefined && typeof value.name !== "string") {
-    throw new Error("package.json piece content must be a JSON object");
-  }
-  for (const section of STRING_MAP_SECTIONS) {
-    const v = value[section];
-    if (v !== undefined && !isMapOf(v, "string")) {
-      throw new Error("package.json piece content must be a JSON object");
-    }
-  }
-  for (const section of BOOLEAN_MAP_SECTIONS) {
-    const v = value[section];
-    if (v !== undefined && !isMapOf(v, "boolean")) {
-      throw new Error("package.json piece content must be a JSON object");
-    }
-  }
-  return value as PackageJson;
-}
-
 export function packageJsonMergeWriter(pieces: Piece[]): string {
   const parsed = pieces.map((p) => ({
     piece: p,
-    json: parsePackageJson(p.content),
+    json: parseJson<PackageJson>(p.content),
   }));
   const skeleton = parsed.find((e) => e.json.name);
-  const pkg: Record<string, unknown> = skeleton ? { ...skeleton.json } : {};
+  const pkg: PackageJson = skeleton ? { ...skeleton.json } : {};
   for (const { piece, json } of parsed) {
     if (skeleton && piece === skeleton.piece) continue;
-    for (const section of PACKAGE_JSON_MERGE_SECTIONS) {
+    for (const section of STRING_MAP_SECTIONS) {
       const incoming = json[section];
       if (!incoming) continue;
-      const base = (pkg[section] as Record<string, string | boolean>) ?? {};
-      pkg[section] = { ...incoming, ...base };
+      pkg[section] = { ...incoming, ...(pkg[section] ?? {}) };
+    }
+    for (const section of BOOLEAN_MAP_SECTIONS) {
+      const incoming = json[section];
+      if (!incoming) continue;
+      pkg[section] = { ...incoming, ...(pkg[section] ?? {}) };
     }
   }
   return `${JSON.stringify(pkg, null, 2)}\n`;

@@ -25,7 +25,7 @@ Writers live in `patch-writers` and are keyed by filename (basename, or extensio
 ```ts
 import { PatchMerger, PatchEntry } from "@deterministic-code/patch-merger";
 
-const merger = new PatchMerger({ settings });
+const merger = new PatchMerger();
 merger.register(new PatchEntry({ target: "package.json", content: "{…}" }));
 await merger.apply(rootDir);
 ```
@@ -34,4 +34,4 @@ await merger.apply(rootDir);
 
 ## Build
 
-`vite build` → `typescript/dist` (ESM + CJS + bundled `.d.ts`). Consumed as a git dependency, the `prepare` script builds `typescript/dist` on install.
+`vite build` → `typescript/dist` (ESM + CJS + bundled `.d.ts`).

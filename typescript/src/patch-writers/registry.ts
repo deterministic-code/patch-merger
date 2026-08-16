@@ -8,23 +8,15 @@ import { cargoTomlWriter } from "./cargo-toml-writer.ts";
 import { dockerfileWriter } from "./dockerfile-writer.ts";
 import { modRsWriter } from "./mod-rs-writer.ts";
 import { libRsWriter } from "./lib-rs-writer.ts";
-import {
-  dockerignoreWriter,
-  type ComposeSettings,
-} from "./dockerignore-writer.ts";
+import { dockerignoreWriter } from "./dockerignore-writer.ts";
 
-export type { ComposeSettings };
-
-export type WriterPiece = {
+type WriterPiece = {
   target: string;
   content: string;
   section?: string;
 };
 
-export type PatchWriter = (
-  pieces: WriterPiece[],
-  settings?: ComposeSettings,
-) => string | null;
+type PatchWriter = (pieces: WriterPiece[]) => string | null;
 
 const WRITERS = new Map<string, PatchWriter>([
   ...Object.entries(SHARED_FILE_CONVENTIONS).map(
@@ -45,7 +37,7 @@ const WRITERS = new Map<string, PatchWriter>([
   [".dockerignore", dockerignoreWriter],
 ]);
 
-export function patchWriterFor(target: string): PatchWriter | null {
+function patchWriterFor(target: string): PatchWriter | null {
   const base = target.slice(target.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   const ext = dot > 0 ? base.slice(dot) : "";
@@ -59,13 +51,11 @@ export function isPatchTarget(target: string): boolean {
 export function composePatchTarget({
   target,
   pieces,
-  settings,
 }: {
   target: string;
   pieces: WriterPiece[];
-  settings?: ComposeSettings;
 }): string | null {
   const writer = patchWriterFor(target);
   if (!writer) throw new Error(`composePatchTarget: no writer for '${target}'`);
-  return writer(pieces, settings);
+  return writer(pieces);
 }

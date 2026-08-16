@@ -17,7 +17,7 @@ const ENV: SharedFileConvention = {
   sectionPrefix: "ENV",
 };
 
-export const SHARED_FILE_CONVENTIONS: Record<string, SharedFileConvention> = {
+export const SHARED_FILE_CONVENTIONS = {
   "docker-compose.yml": {
     skeleton: "services:\n",
     indent: "  ",
@@ -27,17 +27,6 @@ export const SHARED_FILE_CONVENTIONS: Record<string, SharedFileConvention> = {
   ".env.example": ENV,
   ".gitignore": { skeleton: ".env\n", indent: "", sectionPrefix: "GITIGNORE" },
 };
-
-export function conventionForTarget(
-  target: string,
-): SharedFileConvention | null {
-  const base = target.slice(target.lastIndexOf("/") + 1);
-  return SHARED_FILE_CONVENTIONS[base] ?? null;
-}
-
-export function isSharedPatchTarget(target: string): boolean {
-  return conventionForTarget(target) !== null;
-}
 
 export function sharedAppendWriter(
   convention: SharedFileConvention,
