@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { cargoTomlWriter } from "../src/patch-writers/cargo-toml-writer.ts";
+import { packageJsonMergeWriter } from "../src/patch-writers/package-json-writer.ts";
 import {
   insertDockerfileCopies,
   applyDockerfileCopies,
@@ -27,6 +28,43 @@ const marker = (id) => ({
 const migrateBin = marker("MIGRATE_BIN");
 const migrateDeps = marker("MIGRATE_DEPS");
 const migrateCopy = marker("MIGRATE_COPY");
+
+describe("packageJsonMergeWriter", () => {
+  const piece = (obj) => ({ kind: "patch", target: "package.json", content: JSON.stringify(obj) });
+
+  test("add-if-absent merges string sections, skeleton value wins", () => {
+    const out = packageJsonMergeWriter([
+      piece({ name: "app", scripts: { build: "vite build" }, dependencies: { a: "^1" } }),
+      piece({ scripts: { build: "IGNORED", test: "vitest" }, dependencies: { b: "^2" } }),
+    ]);
+    const pkg = JSON.parse(out);
+    expect(pkg.name).toBe("app");
+    expect(pkg.scripts).toEqual({ build: "vite build", test: "vitest" });
+    expect(pkg.dependencies).toEqual({ a: "^1", b: "^2" });
+  });
+
+  test("merges a boolean allowScripts map (approve-scripts opt-in), not a string map", () => {
+    const out = packageJsonMergeWriter([
+      piece({ name: "app" }),
+      piece({ dependencies: { "better-sqlite3": "^13" }, allowScripts: { "better-sqlite3": true } }),
+    ]);
+    const pkg = JSON.parse(out);
+    expect(pkg.allowScripts).toEqual({ "better-sqlite3": true });
+    expect(pkg.dependencies).toEqual({ "better-sqlite3": "^13" });
+  });
+
+  test("rejects a non-object piece", () => {
+    expect(() => packageJsonMergeWriter([{ kind: "patch", target: "package.json", content: "42" }])).toThrow(
+      /package\.json piece content must be a JSON object/,
+    );
+  });
+
+  test("rejects a non-string value in a string section", () => {
+    expect(() => packageJsonMergeWriter([piece({ scripts: { build: 1 } })])).toThrow(
+      /package\.json piece content must be a JSON object/,
+    );
+  });
+});
 
 describe("cargoTomlWriter", () => {
   test("no pieces → null", () => {
