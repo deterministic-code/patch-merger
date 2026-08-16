@@ -12,7 +12,6 @@ const STRING_MAP_SECTIONS = [
   "config",
 ] as const;
 
-// allowScripts is the approve-scripts opt-in map: package name → boolean, never a string map.
 const BOOLEAN_MAP_SECTIONS = ["allowScripts"] as const;
 
 const PACKAGE_JSON_MERGE_SECTIONS = [
@@ -23,7 +22,6 @@ const PACKAGE_JSON_MERGE_SECTIONS = [
 type StringMap = Record<string, string>;
 type BooleanMap = Record<string, boolean>;
 
-/** A parsed package.json — a JSON object whose string merge sections (scripts/dependencies/…) are string maps and whose allowScripts section is a boolean map. Extra keys (version, type, …) are preserved from the skeleton. */
 export interface PackageJson {
   name?: string;
   scripts?: StringMap;
@@ -66,7 +64,6 @@ function parsePackageJson(text: string): PackageJson {
   return value;
 }
 
-/** Compose package.json from its pieces: the skeleton piece (the only one carrying a `name`) is the base manifest, or an empty manifest when no skeleton is present, so a fragment-only patch (e.g. a lone `dependencies` piece declaring one package) still materializes a valid file. Every other piece contributes merge-section entries add-if-absent: a key already on the base keeps its value, so a fragment never clobbers a version or script the skeleton (or an earlier fragment) already set. */
 export function packageJsonMergeWriter(pieces: Piece[]): string {
   const parsed = pieces.map((p) => ({
     piece: p,

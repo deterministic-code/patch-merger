@@ -1,23 +1,23 @@
-import { DOCKERIGNORE_TRIGGER as t, MarkedFileEditor as a, MarkedSectionMissingError as c, PATCHES_DIR as i, PATCH_ENTRY_LINE_PREFIX as o, PatchMerger as n, assemblePatches as E, composePatchTarget as P, conventionForTarget as h, dockerignoreSection as s, formatPatchEntryLine as T, insertDockerfileCopies as g, isPatchTarget as k, isSharedPatchTarget as p, makePatchEntry as R, parsePatchEntryLine as d, patchPieceFilename as l, patchWriterFor as m, replaceMarkedBlockText as F } from "./patch-merger.js";
+import { DOCKERIGNORE_TRIGGER as t, MarkedSectionMissingError as a, PATCHES_DIR as c, PATCH_ENTRY_LINE_PREFIX as o, PatchEntry as i, PatchMerger as n, assemblePatches as P, composePatchTarget as h, conventionForTarget as E, dockerignoreSection as s, formatPatchEntryLine as T, insertDockerfileCopies as g, isPatchTarget as p, isSharedPatchTarget as R, makePatchEntry as k, parsePatchEntryLine as m, patchPieceFilename as l, patchWriterFor as I, replaceMarkedBlockText as _ } from "./patch-merger.js";
 export {
   t as DOCKERIGNORE_TRIGGER,
-  a as MarkedFileEditor,
-  c as MarkedSectionMissingError,
-  i as PATCHES_DIR,
+  a as MarkedSectionMissingError,
+  c as PATCHES_DIR,
   o as PATCH_ENTRY_LINE_PREFIX,
+  i as PatchEntry,
   n as PatchMerger,
-  E as assemblePatches,
-  P as composePatchTarget,
-  h as conventionForTarget,
+  P as assemblePatches,
+  h as composePatchTarget,
+  E as conventionForTarget,
   s as dockerignoreSection,
   T as formatPatchEntryLine,
   g as insertDockerfileCopies,
-  k as isPatchTarget,
-  p as isSharedPatchTarget,
-  R as makePatchEntry,
-  d as parsePatchEntryLine,
+  p as isPatchTarget,
+  R as isSharedPatchTarget,
+  k as makePatchEntry,
+  m as parsePatchEntryLine,
   l as patchPieceFilename,
-  m as patchWriterFor,
-  F as replaceMarkedBlockText
+  I as patchWriterFor,
+  _ as replaceMarkedBlockText
 };
 //# sourceMappingURL=index.js.map

@@ -8,6 +8,8 @@ A codegen run has many emitters contributing to the same shared files — `packa
 
 ## Registered writers
 
+Writers live in `patch-writers` and are keyed by filename (basename, or extension for project-specific names like `GeneratedApp.csproj`). Adding a target means registering a writer there; `PatchMerger` only groups pieces and writes files.
+
 | Target | Writer | Merge strategy |
 | --- | --- | --- |
 | `.env` / `.gitignore` / `docker-compose.yml` | `sharedAppendWriter` | section-keyed upsert-append |
@@ -32,7 +34,9 @@ merger.register(makePatchEntry({ target: "package.json", content: "{…}" }));
 await merger.apply(rootDir);
 ```
 
-Pieces can also be persisted one-file-per-entry (`PATCHES_DIR`) and composed at end-of-run with `assemblePatches({ patchesDir, outRoot })`.
+`makePatchEntry` builds a frozen `PatchEntry`. `apply(rootDir)` composes each registered target and writes it under `rootDir` (creates parent directories; marks `.sh` files executable).
+
+Pieces can also be persisted one-file-per-entry (`PATCHES_DIR`) and composed at end-of-run with `assemblePatches({ patchesDir, outRoot })`, which loads them into a `PatchMerger` and uses the same write path.
 
 ## Build
 
