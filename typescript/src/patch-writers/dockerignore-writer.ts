@@ -1,7 +1,7 @@
 interface Piece {
+  target: string;
   content: string;
   section?: string;
-  path?: string;
 }
 
 // Host build artifacts each language lane produces on disk; the Dockerfile `RUN npm install` / cargo build / dotnet publish rebuilds them inside the image, so the host copies must never ride in via `COPY <lane>/. ./` (a macOS/arm64 better-sqlite3 .node in the Linux image is an "Exec format error"). Prefixed with the lane's dir so the pattern matches the nested `backend/typescript/node_modules`, not just a root `node_modules`.
@@ -41,22 +41,29 @@ export type ComposeSettings =
 
 function laneLanguage(section: string | undefined): string | null {
   const match = DOCKERIGNORE_SECTION.exec(section ?? "");
-  return match ? match[1].toLowerCase() : null;
+  const language = match?.[1];
+  return language ? language.toLowerCase() : null;
 }
 
-/** Compose the single root `.dockerignore` from the participating lanes' trigger pieces. Every backend Dockerfile builds with `context: .` at the project root, so one root ignore-file serves every lane; each lane's patterns are prefixed with the lane's output dir carried on the piece's `path` (stamped by the producing emitter, which owns the layout) — so a nested `backend/typescript/node_modules` is excluded, not just a root one. The frontend lane (present only in the full-stack tier) is added from `settings`. Output is sorted for a deterministic, testable result. */
+/** Project-root-relative directory of `target`, with a trailing slash; empty when the file sits at the root. */
+function dirPrefix(target: string): string {
+  const slash = target.lastIndexOf("/");
+  return slash === -1 ? "" : target.slice(0, slash + 1);
+}
+
+/** Compose the single root `.dockerignore` from the participating lanes' trigger pieces. Every backend Dockerfile builds with `context: .` at the project root, so one root ignore-file serves every lane. Each piece's `target` is the ignore file under that lane (`backend/typescript/.dockerignore`); the directory prefix is applied to that lane's artifacts so a nested `backend/typescript/node_modules` is excluded, not just a root one. The frontend lane (present only in the full-stack tier) is added from `settings`. Output is sorted for a deterministic, testable result. */
 export function dockerignoreWriter(
   pieces: Piece[],
   settings?: ComposeSettings,
 ): string | null {
-  if (!pieces || pieces.length === 0) return null;
+  if (pieces.length === 0) return null;
   const lines = new Set(COMMON_IGNORES);
   for (const piece of pieces) {
     const language = laneLanguage(piece.section);
     if (!language) continue;
     const artifacts = LANE_IGNORES[language];
     if (!artifacts) continue;
-    const prefix = piece.path ?? "";
+    const prefix = dirPrefix(piece.target);
     for (const artifact of artifacts) lines.add(`${prefix}${artifact}`);
   }
   if (settings?.applicationTier === "full-stack") {

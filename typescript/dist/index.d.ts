@@ -52,16 +52,10 @@ export declare function isPatchTarget(target: string): boolean;
 
 export declare function isSharedPatchTarget(target: string): boolean;
 
-/** A parsed YAML/JSON value — the precise recursive type for arbitrary settings documents the patch writers and entry validators operate on. */
-export declare type JsonValue = string | number | boolean | null | undefined | JsonValue[] | {
-    [key: string]: JsonValue;
-};
-
-export declare function makePatchEntry({ target, content, section, path, }: {
+export declare function makePatchEntry({ target, content, section, }: {
     target: string;
-    content: unknown;
+    content: string;
     section?: string;
-    path?: string;
 }): PatchEntry;
 
 export declare class MarkedFileEditor {
@@ -86,7 +80,6 @@ export declare type PatchEntry = {
     target: string;
     content: string;
     section?: string;
-    path?: string;
 };
 
 export declare const PATCHES_DIR = "deterministic/patches";

@@ -5,12 +5,16 @@ import {
 
 interface SectionPiece {
   content: string;
-  section?: string;
+  section: string;
 }
 
 interface Piece {
   content: string;
   section?: string;
+}
+
+export function isSectionPiece(piece: Piece): piece is SectionPiece {
+  return piece.section !== undefined;
 }
 
 /** Replace each section piece's marked region in `content`, resolving `section` → the style-correct BEGIN/END markers so emitters never touch marker syntax. Shared by the Dockerfile and Cargo.toml composers. Throws if the skeleton lacks a section's markers — surfacing template drift or a missing skeleton piece. */
@@ -20,7 +24,7 @@ export function applyMarkedFills(
 ): string {
   let next = content;
   for (const patch of sectionPieces) {
-    const markers = sectionMarkerLines(next, patch.section as string);
+    const markers = sectionMarkerLines(next, patch.section);
     if (!markers) {
       throw new Error(
         `applyMarkedFills: skeleton has no marked region for section ${JSON.stringify(patch.section)}`,
@@ -40,8 +44,5 @@ export function applyMarkedFills(
 export function markedBlockWriter(pieces: Piece[]): string | null {
   const skeleton = pieces.find((p) => !p.section);
   if (!skeleton) return null;
-  return applyMarkedFills(
-    skeleton.content,
-    pieces.filter((p) => p.section),
-  );
+  return applyMarkedFills(skeleton.content, pieces.filter(isSectionPiece));
 }

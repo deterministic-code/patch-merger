@@ -18,7 +18,7 @@ import {
   dockerignoreWriter,
   type ComposeSettings,
 } from "./patch-writers/dockerignore-writer.ts";
-import type { JsonValue } from "./json-value.ts";
+import { isNodeError, isRecord, parseJson } from "./json.ts";
 export {
   DOCKERIGNORE_TRIGGER,
   dockerignoreSection,
@@ -37,7 +37,6 @@ export type PatchEntry = {
   target: string;
   content: string;
   section?: string;
-  path?: string;
 };
 
 type PatchWriter = (
@@ -56,22 +55,18 @@ export function makePatchEntry({
   target,
   content,
   section,
-  path,
 }: {
   target: string;
-  content: unknown;
+  content: string;
   section?: string;
-  path?: string;
 }): PatchEntry {
-  if (typeof content !== "string" || content.length === 0) {
+  if (content.length === 0) {
     throw new Error(
       `makePatchEntry: content for "${target}" must be a non-empty string`,
     );
   }
   const entry: PatchEntry = { kind: "patch", target, content };
   if (section) entry.section = section;
-  if (path !== undefined) entry.path = path;
-  assertPatchEntry(entry);
   return entry;
 }
 
@@ -141,50 +136,28 @@ export function formatPatchEntryLine(entry: PatchEntry): string {
 
 export function parsePatchEntryLine(line: string): PatchEntry | null {
   if (!line.startsWith(PATCH_ENTRY_LINE_PREFIX)) return null;
-  const entry = JSON.parse(
-    line.slice(PATCH_ENTRY_LINE_PREFIX.length),
-  ) as JsonValue;
+  const entry = parseJson(line.slice(PATCH_ENTRY_LINE_PREFIX.length));
   assertPatchEntry(entry);
   return entry;
 }
 
 // The FROZEN SDK patch-entry shape — dumb data the filename-keyed PatchWriter composes; no key the writer selects on (no method / language / markers).
-const PATCH_ENTRY_KEYS = new Set([
-  "kind",
-  "target",
-  "content",
-  "section",
-  "path",
-]);
+const PATCH_ENTRY_KEYS = new Set(["kind", "target", "content", "section"]);
 
-function assertPatchEntry(entry: JsonValue): asserts entry is PatchEntry {
-  const e = entry as {
-    kind?: JsonValue;
-    target?: JsonValue;
-    content?: JsonValue;
-    section?: JsonValue;
-    path?: JsonValue;
-  };
+function assertPatchEntry(entry: unknown): asserts entry is PatchEntry {
   if (
-    entry === null ||
-    typeof entry !== "object" ||
-    Array.isArray(entry) ||
-    e.kind !== "patch" ||
-    typeof e.target !== "string" ||
-    typeof e.content !== "string"
+    !isRecord(entry) ||
+    entry.kind !== "patch" ||
+    typeof entry.target !== "string" ||
+    typeof entry.content !== "string"
   ) {
     throw new Error(
       `invalid patch entry: ${JSON.stringify(entry)} — expected {kind:"patch", target, content}`,
     );
   }
-  if (e.section !== undefined && typeof e.section !== "string") {
+  if (entry.section !== undefined && typeof entry.section !== "string") {
     throw new Error(
-      `invalid patch entry section: ${JSON.stringify(e.section)} — expected a string`,
-    );
-  }
-  if (e.path !== undefined && typeof e.path !== "string") {
-    throw new Error(
-      `invalid patch entry path: ${JSON.stringify(e.path)} — expected a string`,
+      `invalid patch entry section: ${JSON.stringify(entry.section)} — expected a string`,
     );
   }
   for (const key of Object.keys(entry)) {
@@ -197,8 +170,8 @@ function assertPatchEntry(entry: JsonValue): asserts entry is PatchEntry {
 }
 
 async function readFileOrNull(filePath: string): Promise<string | null> {
-  return readFile(filePath, "utf8").catch((err: NodeJS.ErrnoException) => {
-    if (err.code === "ENOENT") return null;
+  return readFile(filePath, "utf8").catch((err: unknown) => {
+    if (isNodeError(err) && err.code === "ENOENT") return null;
     throw err;
   });
 }
@@ -298,8 +271,9 @@ export class MarkedFileEditor {
     // Re-join attribute lines (e.g. #[cfg(test)]) with the declaration below them so entries stay atomic.
     const entries: string[] = [];
     for (const l of existing) {
-      if (entries.length > 0 && entries[entries.length - 1].endsWith("]")) {
-        entries[entries.length - 1] += `\n${l}`;
+      const last = entries[entries.length - 1];
+      if (last?.endsWith("]")) {
+        entries[entries.length - 1] = `${last}\n${l}`;
       } else {
         entries.push(l);
       }
@@ -311,16 +285,21 @@ export class MarkedFileEditor {
       startMarker,
       endMarker,
       block: [...union].sort().join("\n"),
-      contextLabel,
+      ...(contextLabel === undefined ? {} : { contextLabel }),
     });
   }
 }
 
-// Group entries as target -> patches[], preserving insertion order so a file's patches apply in emit order.
+// Group entries as output-file -> patches[], preserving insertion order so a file's patches apply in emit order. Every `.dockerignore` piece composes into the root file (Docker build context is `.`); a nested target like `backend/typescript/.dockerignore` only carries the lane prefix.
+function outputTarget(target: string): string {
+  return basename(target) === ".dockerignore" ? ".dockerignore" : target;
+}
+
 function groupByTarget(entries: PatchEntry[]): Map<string, PatchEntry[]> {
   const byTarget = new Map<string, PatchEntry[]>();
   for (const entry of entries) {
-    byTarget.set(entry.target, [...(byTarget.get(entry.target) ?? []), entry]);
+    const key = outputTarget(entry.target);
+    byTarget.set(key, [...(byTarget.get(key) ?? []), entry]);
   }
   return byTarget;
 }
@@ -381,8 +360,8 @@ export function patchPieceFilename(index: number, target: string): string {
 }
 
 async function readdirOrEmpty(dir: string): Promise<string[]> {
-  return readdir(dir).catch((err: NodeJS.ErrnoException): string[] => {
-    if (err.code === "ENOENT") return [];
+  return readdir(dir).catch((err: unknown): string[] => {
+    if (isNodeError(err) && err.code === "ENOENT") return [];
     throw err;
   });
 }
@@ -404,9 +383,7 @@ export async function assemblePatches({
     .sort();
   const pieces: PatchEntry[] = [];
   for (const file of files) {
-    const entry = JSON.parse(
-      await readFile(join(patchesDir, file), "utf8"),
-    ) as JsonValue;
+    const entry = parseJson(await readFile(join(patchesDir, file), "utf8"));
     assertPatchEntry(entry);
     pieces.push(entry);
   }

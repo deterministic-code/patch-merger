@@ -13,8 +13,9 @@ export function libRsWriter(pieces: Piece[]): string | null {
   const bySection = new Map<string, string[]>();
   for (const p of pieces) {
     if (!p.section) continue;
-    if (!bySection.has(p.section)) bySection.set(p.section, []);
-    bySection.get(p.section)!.push(p.content);
+    const existing = bySection.get(p.section);
+    if (existing) existing.push(p.content);
+    else bySection.set(p.section, [p.content]);
   }
   const fills = [...bySection].map(([section, contents]) => ({
     section,

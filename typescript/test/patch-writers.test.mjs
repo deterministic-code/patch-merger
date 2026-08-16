@@ -165,14 +165,14 @@ describe("dockerfileWriter", () => {
 describe("dockerignoreWriter", () => {
   test("no pieces → null", () => {
     expect(dockerignoreWriter([], {})).toBe(null);
-    expect(dockerignoreWriter(null, {})).toBe(null);
   });
 
   test("settings-less assemble derives lane from a trigger piece's section; unknown lane is skipped", () => {
     const out = dockerignoreWriter(
       [
-        { content: DOCKERIGNORE_TRIGGER },
+        { target: ".dockerignore", content: DOCKERIGNORE_TRIGGER },
         {
+          target: ".dockerignore",
           content: DOCKERIGNORE_TRIGGER,
           section: dockerignoreSection("python"),
         },
@@ -188,6 +188,7 @@ describe("dockerignoreWriter", () => {
     const out = dockerignoreWriter(
       [
         {
+          target: ".dockerignore",
           content: DOCKERIGNORE_TRIGGER,
           section: dockerignoreSection("typescript"),
         },
@@ -199,18 +200,18 @@ describe("dockerignoreWriter", () => {
     expect(out).not.toContain("backend/");
   });
 
-  test("prefixes each lane with the piece path and adds frontend ignores in full-stack", () => {
+  test("prefixes each lane with the directory on target and adds frontend ignores in full-stack", () => {
     const out = dockerignoreWriter(
       [
         {
+          target: "backend/typescript/.dockerignore",
           content: DOCKERIGNORE_TRIGGER,
           section: dockerignoreSection("typescript"),
-          path: "backend/typescript/",
         },
         {
+          target: "backend/rust/.dockerignore",
           content: DOCKERIGNORE_TRIGGER,
           section: dockerignoreSection("rust"),
-          path: "backend/rust/",
         },
       ],
       { applicationTier: "full-stack" },
