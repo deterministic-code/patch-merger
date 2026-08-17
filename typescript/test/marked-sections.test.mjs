@@ -2,7 +2,10 @@ import { describe, test, expect } from "vitest";
 import {
   MarkedSectionMissingError,
   indentBody,
+  insertAfter,
+  append,
   replaceMarkedBlockText,
+  replaceMarkedSection,
 } from "../src/common/marked-sections.ts";
 
 describe("MarkedSectionMissingError", () => {
@@ -69,5 +72,33 @@ describe("replaceMarkedBlockText", () => {
     expect(() =>
       replaceMarkedBlockText(original, START, END, "x"),
     ).toThrow(/absent or out of order/);
+  });
+});
+
+describe("append", () => {
+  test("empty block leaves content unchanged", () => {
+    expect(append("base", "")).toBe("base");
+  });
+
+  test("adds a separating newline when the base has none", () => {
+    expect(append("header:", "PORT=1")).toBe("header:\nPORT=1\n");
+  });
+});
+
+describe("insertAfter", () => {
+  test("inserts a block on the line after the last matching needle", () => {
+    expect(insertAfter("COPY a a\nCOPY b b\nRUN x\n", "COPY b b", "COPY c c")).toBe(
+      "COPY a a\nCOPY b b\nCOPY c c\nRUN x\n",
+    );
+  });
+});
+
+describe("replaceMarkedSection", () => {
+  const START = "// === BEGIN X ===";
+  const END = "// === END X ===";
+  test("fills by section name, or null when the region is missing", () => {
+    const content = `${START}\nold\n${END}`;
+    expect(replaceMarkedSection(content, "X", "new")).toContain("new");
+    expect(replaceMarkedSection(content, "NOPE", "new")).toBe(null);
   });
 });

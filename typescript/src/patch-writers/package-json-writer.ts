@@ -1,8 +1,5 @@
 import { parseJson } from "../common/json.ts";
-
-interface Piece {
-  content: string;
-}
+import type { Piece } from "../common/piece.ts";
 
 const MAP_SECTIONS = [
   "scripts",
@@ -23,7 +20,7 @@ interface PackageJson {
   allowScripts?: JsonMap;
 }
 
-export function packageJsonMergeWriter(pieces: Piece[]): string {
+export const packageJsonMergeWriter = (pieces: Piece[]): string => {
   const parsed = pieces.map((p) => parseJson<PackageJson>(p.content));
   const skeleton = parsed.find((json) => json.name);
   const pkg: PackageJson = { ...skeleton };
@@ -35,4 +32,4 @@ export function packageJsonMergeWriter(pieces: Piece[]): string {
     }
   }
   return `${JSON.stringify(pkg, null, 2)}\n`;
-}
+};

@@ -1,3 +1,1 @@
-export function parseJson<T>(text: string): T {
-  return JSON.parse(text);
-}
+export const parseJson = <T>(text: string): T => JSON.parse(text);

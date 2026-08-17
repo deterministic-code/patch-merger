@@ -1,4 +1,4 @@
-export class PatchEntry {
+export class Patch {
   readonly target: string;
   readonly content: string;
   readonly section?: string;
@@ -14,7 +14,7 @@ export class PatchEntry {
   }) {
     if (content.length === 0) {
       throw new Error(
-        `PatchEntry: content for "${target}" must be a non-empty string`,
+        `Patch: content for "${target}" must be a non-empty string`,
       );
     }
     this.target = target;
