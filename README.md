@@ -59,4 +59,4 @@ await merger.apply(rootDir);
 
 ## Build
 
-`npm run build` writes ESM, CJS, and bundled `.d.ts` to `typescript/dist`. That directory is **checked in** so git and `file:` installs resolve `@deterministic-code/patch-merger` without a `prepare` script (npm may block install scripts). Regenerated dist belongs in the same commit as the source change.
+`npm run build` writes ESM and CJS to `typescript/dist`. TypeScript resolves types from `typescript/src`, so git and `file:` installs typecheck without a built `dist` (npm may block `prepare` scripts). Regenerated dist belongs in the same commit as the source change when you need a runnable JS entry.
