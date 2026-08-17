@@ -1,87 +1,28 @@
 import { describe, test, expect } from "vitest";
 import { PatchMerger, Patch } from "../src/patch-merger.ts";
 
-describe("PatchMerger.add", () => {
-  test("a registered basename resolves a writer", () => {
-    const merger = new PatchMerger();
-    expect(() =>
-      merger.add(new Patch({ target: "backend/app.ts", content: "x" })),
-    ).not.toThrow();
-  });
+const patch = (fields) => new Patch(fields);
+const add = (merger, fields) => merger.add(patch(fields));
+const join = (patches) => patches.map((p) => p.content).join("");
 
-  test("a registered extension (.csproj) resolves a writer for a project-specific basename", () => {
-    const merger = new PatchMerger();
-    expect(() =>
-      merger.add(
-        new Patch({ target: "dotnet/GeneratedApp.csproj", content: "x" }),
-      ),
-    ).not.toThrow();
+const apply = async (pieces, register) => {
+  const writes = [];
+  const merger = new PatchMerger(async (path, content) => {
+    writes.push({ path, content });
   });
-
-  test("an unregistered target has no writer", () => {
-    const merger = new PatchMerger();
-    expect(() =>
-      merger.add(new Patch({ target: "src/random.txt", content: "x" })),
-    ).toThrow(/no PatchWriter for target 'src\/random.txt'/);
-  });
-
-  test("an extension-less basename yields no writer", () => {
-    const merger = new PatchMerger();
-    expect(() =>
-      merger.add(new Patch({ target: "some/Makefile", content: "x" })),
-    ).toThrow(/no PatchWriter/);
-  });
-});
-
-describe("PatchMerger.registerWriter", () => {
-  test("a basename key lets add accept that target", () => {
-    const merger = new PatchMerger();
-    merger.registerWriter("Makefile", (patches) => patches.map((p) => p.content).join(""));
-    expect(() =>
-      merger.add(new Patch({ target: "some/Makefile", content: "x" })),
-    ).not.toThrow();
-  });
-
-  test("an extension key matches any basename with that suffix", () => {
-    const merger = new PatchMerger();
-    merger.registerWriter(".txt", (patches) => patches.map((p) => p.content).join(""));
-    expect(() =>
-      merger.add(new Patch({ target: "src/random.txt", content: "x" })),
-    ).not.toThrow();
-  });
-
-  test("apply uses the registered composer", async () => {
-    const writes = [];
-    const merger = new PatchMerger(async (path, content) => {
-      writes.push({ path, content });
-    });
-    merger.registerWriter("notes.md", (patches) =>
-      patches.map((p) => p.content).join(""),
-    );
-    merger.add(new Patch({ target: "notes.md", content: "hello\n" }));
-    const written = await merger.apply("/root");
-    expect(written).toEqual(["notes.md"]);
-    expect(writes[0].content).toBe("hello\n");
-  });
-
-  test("does not leak onto other PatchMerger instances", () => {
-    const a = new PatchMerger();
-    a.registerWriter("Makefile", () => "x");
-    const b = new PatchMerger();
-    expect(() =>
-      b.add(new Patch({ target: "Makefile", content: "x" })),
-    ).toThrow(/no PatchWriter/);
-  });
-});
+  register?.(merger);
+  for (const piece of pieces) add(merger, piece);
+  return { written: await merger.apply("/root"), writes };
+};
 
 describe("Patch", () => {
-  test("attaches section only when given", () => {
-    expect(new Patch({ target: ".env", content: "PORT=1\n" })).toEqual({
+  test("copies fields, keeps nested target, rejects empty content", () => {
+    expect(patch({ target: ".env", content: "PORT=1\n" })).toEqual({
       target: ".env",
       content: "PORT=1\n",
     });
     expect(
-      new Patch({
+      patch({
         target: ".env",
         content: "PORT=1\n",
         section: "ENV_TS",
@@ -91,11 +32,8 @@ describe("Patch", () => {
       content: "PORT=1\n",
       section: "ENV_TS",
     });
-  });
-
-  test("nested .dockerignore targets keep the lane directory on target", () => {
     expect(
-      new Patch({
+      patch({
         target: "backend/typescript/.dockerignore",
         content: "# trigger",
         section: "DOCKERIGNORE_TYPESCRIPT",
@@ -105,92 +43,113 @@ describe("Patch", () => {
       content: "# trigger",
       section: "DOCKERIGNORE_TYPESCRIPT",
     });
-  });
-
-  test("rejects empty content", () => {
-    expect(() => new Patch({ target: ".env", content: "" })).toThrow(
+    expect(() => patch({ target: ".env", content: "" })).toThrow(
       /must be a non-empty string/,
     );
   });
 });
 
-describe("PatchMerger — in-memory apply via an injected writer", () => {
-  test("add rejects a target with no writer", () => {
+describe("PatchMerger.add", () => {
+  test("resolves registered basename/extension; rejects unknown targets", () => {
     const merger = new PatchMerger();
     expect(() =>
-      merger.add(new Patch({ target: "no.txt", content: "x" })),
-    ).toThrow(/no PatchWriter for target 'no.txt'/);
+      add(merger, { target: "backend/app.ts", content: "x" }),
+    ).not.toThrow();
+    expect(() =>
+      add(merger, { target: "dotnet/GeneratedApp.csproj", content: "x" }),
+    ).not.toThrow();
+    expect(() =>
+      add(merger, { target: "src/random.txt", content: "x" }),
+    ).toThrow(/no PatchWriter for target 'src\/random.txt'/);
+    expect(() =>
+      add(merger, { target: "some/Makefile", content: "x" }),
+    ).toThrow(/no PatchWriter/);
   });
+});
 
-  test("apply writes each composed target in emit order", async () => {
-    const writes = [];
-    const merger = new PatchMerger(async (path, content) => {
-      writes.push({ path, content });
-    });
-    merger.add(
-      new Patch({
-        target: ".env",
-        content: "PORT=1\n",
-        section: "ENV_TS",
-      }),
+describe("PatchMerger.registerWriter", () => {
+  test("basename and extension keys are instance-local and used by apply", async () => {
+    const a = new PatchMerger();
+    a.registerWriter("Makefile", join);
+    expect(() =>
+      add(a, { target: "some/Makefile", content: "x" }),
+    ).not.toThrow();
+
+    const b = new PatchMerger();
+    b.registerWriter(".txt", join);
+    expect(() =>
+      add(b, { target: "src/random.txt", content: "x" }),
+    ).not.toThrow();
+    expect(() => add(b, { target: "Makefile", content: "x" })).toThrow(
+      /no PatchWriter/,
     );
-    merger.add(
-      new Patch({
+
+    const { written, writes } = await apply(
+      [{ target: "notes.md", content: "hello\n" }],
+      (m) => m.registerWriter("notes.md", join),
+    );
+    expect(written).toEqual(["notes.md"]);
+    expect(writes[0].content).toBe("hello\n");
+  });
+});
+
+describe("PatchMerger.apply", () => {
+  test("writes composed targets; skips null; remaps nested dockerignore to root", async () => {
+    const env = await apply([
+      { target: ".env", content: "PORT=1\n", section: "ENV_TS" },
+      {
         target: ".env",
         content: "DATABASE_BACKEND=sqlite\n",
         section: "DB_ENV",
-      }),
-    );
-    const written = await merger.apply("/root");
-    expect(written).toEqual([".env"]);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].path.endsWith(".env")).toBe(true);
-    expect(writes[0].content).toContain("PORT=1");
-    expect(writes[0].content).toContain("DATABASE_BACKEND=sqlite");
-  });
+      },
+    ]);
+    expect(env.written).toEqual([".env"]);
+    expect(env.writes).toHaveLength(1);
+    expect(env.writes[0].path.endsWith(".env")).toBe(true);
+    expect(env.writes[0].content).toContain("PORT=1");
+    expect(env.writes[0].content).toContain("DATABASE_BACKEND=sqlite");
 
-  test("apply skips a target whose pieces do not materialize (composed === null)", async () => {
-    const writes = [];
-    const merger = new PatchMerger(async (path, content) => {
-      writes.push({ path, content });
-    });
-    merger.add(
-      new Patch({
+    const skipped = await apply([
+      {
         target: ".env",
         content: "DATABASE_BACKEND=sqlite\n",
         section: "DB_ENV",
-      }),
-    );
-    const written = await merger.apply("/root");
-    expect(written).toEqual([]);
-    expect(writes).toHaveLength(0);
-  });
+      },
+    ]);
+    expect(skipped.written).toEqual([]);
+    expect(skipped.writes).toHaveLength(0);
 
-  test("nested .dockerignore pieces compose into the root file", async () => {
-    const writes = [];
-    const merger = new PatchMerger(async (path, content) => {
-      writes.push({ path, content });
-    });
-    merger.add(
-      new Patch({
+    const empty = await apply([]);
+    expect(empty.written).toEqual([]);
+    expect(empty.writes).toEqual([]);
+
+    const docker = await apply([
+      {
         target: "backend/typescript/.dockerignore",
-        content: "backend/typescript/node_modules",
+        content: "backend/typescript/node_modules\nbackend/typescript/dist",
         section: "DOCKERIGNORE_TYPESCRIPT",
-      }),
-    );
-    merger.add(
-      new Patch({
+      },
+      {
         target: "backend/rust/.dockerignore",
         content: "backend/rust/target",
         section: "DOCKERIGNORE_RUST",
-      }),
-    );
-    const written = await merger.apply("/root");
-    expect(written).toEqual([".dockerignore"]);
-    expect(writes).toHaveLength(1);
-    expect(writes[0].path.endsWith(".dockerignore")).toBe(true);
-    expect(writes[0].path.includes("typescript")).toBe(false);
-    expect(writes[0].content).toContain("backend/typescript/node_modules");
-    expect(writes[0].content).toContain("backend/rust/target");
+      },
+    ]);
+    expect(docker.written).toEqual([".dockerignore"]);
+    expect(docker.writes[0].path.endsWith(".dockerignore")).toBe(true);
+    expect(docker.writes[0].path.includes("typescript")).toBe(false);
+    for (const line of [
+      ".git",
+      ".env.local",
+      "*.log",
+      "*.sqlite",
+      "*.sqlite3",
+      "*.db",
+      "backend/typescript/node_modules",
+      "backend/typescript/dist",
+      "backend/rust/target",
+    ]) {
+      expect(docker.writes[0].content).toContain(line);
+    }
   });
 });
