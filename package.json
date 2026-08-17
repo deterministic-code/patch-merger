@@ -10,15 +10,15 @@
   },
   "main": "./typescript/dist/index.cjs",
   "module": "./typescript/dist/index.js",
-  "types": "./typescript/dist/index.d.ts",
+  "types": "./typescript/src/index.ts",
   "exports": {
     ".": {
-      "types": "./typescript/dist/index.d.ts",
+      "types": "./typescript/src/index.ts",
       "import": "./typescript/dist/index.js",
       "require": "./typescript/dist/index.cjs"
     },
     "./patch-merger": {
-      "types": "./typescript/dist/patch-merger.d.ts",
+      "types": "./typescript/src/patch-merger.ts",
       "import": "./typescript/dist/patch-merger.js",
       "require": "./typescript/dist/patch-merger.cjs"
     }
