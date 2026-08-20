@@ -337,4 +337,124 @@ describe("SectionWriter", () => {
       ),
     ).toBe("# — START A\n# — END A\n");
   });
+
+  test("creates four nested levels in one patch", () => {
+    expect(
+      writer(
+        [
+          patch("app.ts", "leaf();\n", {
+            sections: ["Root", "Lang", "Feature", "Hook"],
+          }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      [
+        "// — START Root",
+        "// — START Lang",
+        "// — START Feature",
+        "// — START Hook",
+        "leaf();",
+        "// — END Hook",
+        "// — END Feature",
+        "// — END Lang",
+        "// — END Root",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("builds four levels one path segment at a time", () => {
+    expect(
+      writer(
+        [
+          patch(".env", "a=1\n", { sections: ["A"] }),
+          patch(".env", "b=1\n", { sections: ["A", "B"] }),
+          patch(".env", "c=1\n", { sections: ["A", "B", "C"] }),
+          patch(".env", "d=1\n", { sections: ["A", "B", "C", "D"] }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      [
+        "# — START A",
+        "a=1",
+        "# — START B",
+        "b=1",
+        "# — START C",
+        "c=1",
+        "# — START D",
+        "d=1",
+        "# — END D",
+        "# — END C",
+        "# — END B",
+        "# — END A",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("adds a four-level sibling and replaces the original leaf", () => {
+    expect(
+      writer(
+        [
+          patch(".env", "old\n", {
+            sections: ["A", "B", "C", "D"],
+          }),
+          patch(".env", "other\n", {
+            sections: ["A", "B", "C", "E"],
+          }),
+          patch(".env", "new\n", {
+            sections: ["A", "B", "C", "D"],
+          }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      [
+        "# — START A",
+        "# — START B",
+        "# — START C",
+        "# — START D",
+        "new",
+        "# — END D",
+        "# — START E",
+        "other",
+        "# — END E",
+        "# — END C",
+        "# — END B",
+        "# — END A",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("inserts a missing four-level branch at Start of a deep parent", () => {
+    expect(
+      writer(
+        [
+          patch(".env", "keep\n", { sections: ["A", "B", "C"] }),
+          patch(".env", "early\n", {
+            sections: ["A", "B", "C", "D"],
+            appendIfNotExists: "Start",
+          }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      [
+        "# — START A",
+        "# — START B",
+        "# — START C",
+        "# — START D",
+        "early",
+        "# — END D",
+        "keep",
+        "# — END C",
+        "# — END B",
+        "# — END A",
+        "",
+      ].join("\n"),
+    );
+  });
 });

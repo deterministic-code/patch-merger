@@ -50,8 +50,16 @@ describe("PatchMerger.add", () => {
     ).not.toThrow();
     expect(() =>
       merger.add(
-        new Patch({ target: "docker-compose.yml", content: "app:\n" }),
+        new Patch({ target: "docker-compose.yml", content: "app: {}\n" }),
       ),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(
+        new Patch({ target: "openapi.yaml", content: "openapi: 3.0.0\n" }),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(new Patch({ target: "config.xml", content: "<root />\n" })),
     ).not.toThrow();
     expect(() =>
       merger.add(new Patch({ target: "Cargo.toml", content: "[package]\n" })),
@@ -175,6 +183,29 @@ describe("PatchMerger.apply", () => {
     merger.add(new Patch({ target: ".env", content: "PORT=1\n" }));
     merger.add(new Patch({ target: ".env", content: "PORT=2\n" }));
     await expect(merger.apply("/root")).rejects.toThrow(/collision/);
+  });
+
+  test("yml and xml targets use deep document writers", async () => {
+    const strategy = recordingStrategy();
+    const merger = new PatchMerger({
+      failOnCollision: false,
+      applyStrategy: strategy,
+    });
+    merger.add(new Patch({ target: "app.yml", content: "a: 1\n" }));
+    merger.add(new Patch({ target: "app.yml", content: "b: 2\n" }));
+    merger.add(
+      new Patch({ target: "app.xml", content: "<root><a>1</a></root>" }),
+    );
+    merger.add(
+      new Patch({ target: "app.xml", content: "<root><b>2</b></root>" }),
+    );
+    await merger.apply("/root");
+    const yml = strategy.writes.find((write) => write.path.endsWith("app.yml"));
+    const xml = strategy.writes.find((write) => write.path.endsWith("app.xml"));
+    expect(yml?.content).toMatch(/a: 1/);
+    expect(yml?.content).toMatch(/b: 2/);
+    expect(xml?.content).toMatch(/<a>1<\/a>/);
+    expect(xml?.content).toMatch(/<b>2<\/b>/);
   });
 
   test("failOnCollision false lets the later patch win", async () => {

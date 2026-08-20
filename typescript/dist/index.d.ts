@@ -8,6 +8,14 @@ declare const deepJsonWriter: Writer;
 export { deepJsonWriter as DeepJsonWriter }
 export { deepJsonWriter }
 
+declare const deepXmlWriter: Writer;
+export { deepXmlWriter as DeepXmlWriter }
+export { deepXmlWriter }
+
+declare const deepYamlWriter: Writer;
+export { deepYamlWriter as DeepYamlWriter }
+export { deepYamlWriter }
+
 export declare const defaultWriters: WriterBinding[];
 
 export declare type IPatchApplyStrategy = {

@@ -1,8 +1,8 @@
-import { I as e, P as r, a as s, b as P } from "./patch-merger-DcLuR6tx.js";
+import { I as t, P as r, c as s, e as c } from "./patch-merger-BUeyiYse.js";
 export {
-  e as IPatchFileSystemApplyStrategy,
+  t as IPatchFileSystemApplyStrategy,
   r as Patch,
   s as PatchMerger,
-  P as defaultWriters
+  c as defaultWriters
 };
 //# sourceMappingURL=patch-merger.js.map
