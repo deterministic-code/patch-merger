@@ -1,28 +1,33 @@
-import { writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { Patch, type PatchOptions } from "./patch.ts";
 import type { Writer } from "./writer.ts";
+import {
+  IPatchFileSystemApplyStrategy,
+  type IPatchApplyStrategy,
+} from "./apply-strategy.ts";
+import { defaultWriters, type WriterBinding } from "./default-writers.ts";
+import { matchesGlob } from "./glob.ts";
 
 export { Patch, type PatchOptions };
 export type { Writer, ComposeContext } from "./writer.ts";
-
-type FileWriter = (path: string, content: string) => Promise<void>;
+export {
+  IPatchFileSystemApplyStrategy,
+  type IPatchApplyStrategy,
+} from "./apply-strategy.ts";
+export { defaultWriters, type WriterBinding } from "./default-writers.ts";
 
 export type PatchMergerOptions = {
   failOnCollision?: boolean;
   parallelWriteMode?: boolean;
-  fileWriter?: FileWriter;
+  writers?: Iterable<WriterBinding>;
+  applyStrategy?: IPatchApplyStrategy;
 };
 
-const defaultFileWriter: FileWriter = async (path, content) => {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, content, "utf8");
-};
-
-const writerFor = (writers: Map<string, Writer>, target: string) => {
-  const base = target.slice(target.lastIndexOf("/") + 1);
-  const dot = base.lastIndexOf(".");
-  return writers.get(base) ?? writers.get(dot > 0 ? base.slice(dot) : "") ?? null;
+const writerFor = (writers: WriterBinding[], target: string) => {
+  for (let i = writers.length - 1; i >= 0; i--) {
+    const binding = writers[i]!;
+    if (matchesGlob(target, binding[0])) return binding[1];
+  }
+  return null;
 };
 
 const groupByTarget = (patches: Patch[]) =>
@@ -45,23 +50,25 @@ const mapAsync = <T, U>(
 
 export class PatchMerger {
   #patches: Patch[] = [];
-  #writers = new Map<string, Writer>();
+  #writers: WriterBinding[];
   #failOnCollision: boolean;
   #parallelWriteMode: boolean;
-  #fileWriter: FileWriter;
+  #applyStrategy: IPatchApplyStrategy;
 
   constructor({
     failOnCollision = true,
     parallelWriteMode = true,
-    fileWriter = defaultFileWriter,
+    writers = defaultWriters,
+    applyStrategy = new IPatchFileSystemApplyStrategy(),
   }: PatchMergerOptions = {}) {
     this.#failOnCollision = failOnCollision;
     this.#parallelWriteMode = parallelWriteMode;
-    this.#fileWriter = fileWriter;
+    this.#writers = [...writers];
+    this.#applyStrategy = applyStrategy;
   }
 
-  registerWriter(key: string, writer: Writer): void {
-    this.#writers.set(key, writer);
+  registerWriter(glob: string, writer: Writer): void {
+    this.#writers.push([glob, writer]);
   }
 
   add(patch: Patch): void {
@@ -73,12 +80,15 @@ export class PatchMerger {
     this.#patches.push(patch);
   }
 
-  async apply(rootDir: string): Promise<string[]> {
+  async apply(
+    rootDir: string,
+    strategy: IPatchApplyStrategy = this.#applyStrategy,
+  ): Promise<string[]> {
     const ctx = { failOnCollision: this.#failOnCollision };
     const write = async ([target, pieces]: [string, Patch[]]) => {
       const contents = writerFor(this.#writers, target)!(pieces, ctx);
       if (contents === null) return null;
-      await this.#fileWriter(join(rootDir, target), contents);
+      await strategy.apply(target, contents, rootDir);
       return target;
     };
     const written = await mapAsync(
