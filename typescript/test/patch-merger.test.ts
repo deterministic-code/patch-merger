@@ -100,14 +100,28 @@ describe("PatchMerger.apply", () => {
     expect(await readFile(join(root, "nested/.env"), "utf8")).toBe("PORT=9\n");
   });
 
-  test("honors failOnCollision when composing", async () => {
+  test("failOnCollision defaults to true", async () => {
     const merger = new PatchMerger({
-      failOnCollision: true,
       fileWriter: async () => undefined,
     });
     merger.registerWriter(".env", LineUpsertWriter);
     merger.add(new Patch({ target: ".env", content: "PORT=1\n" }));
     merger.add(new Patch({ target: ".env", content: "PORT=2\n" }));
     await expect(merger.apply("/root")).rejects.toThrow(/collision/);
+  });
+
+  test("failOnCollision false lets the later patch win", async () => {
+    const writes: { path: string; content: string }[] = [];
+    const merger = new PatchMerger({
+      failOnCollision: false,
+      fileWriter: async (path, content) => {
+        writes.push({ path, content });
+      },
+    });
+    merger.registerWriter(".env", LineUpsertWriter);
+    merger.add(new Patch({ target: ".env", content: "PORT=1\n" }));
+    merger.add(new Patch({ target: ".env", content: "PORT=2\n" }));
+    await merger.apply("/root");
+    expect(writes[0]?.content).toBe("PORT=2\n");
   });
 });

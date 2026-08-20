@@ -51,7 +51,7 @@ export class PatchMerger {
   #fileWriter: FileWriter;
 
   constructor({
-    failOnCollision = false,
+    failOnCollision = true,
     parallelWriteMode = true,
     fileWriter = defaultFileWriter,
   }: PatchMergerOptions = {}) {

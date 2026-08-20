@@ -35,7 +35,7 @@ const F = async (e, t) => {
 var c, o, l, u, h;
 class k {
   constructor({
-    failOnCollision: t = !1,
+    failOnCollision: t = !0,
     parallelWriteMode: r = !0,
     fileWriter: i = F
   } = {}) {

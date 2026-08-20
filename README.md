@@ -17,10 +17,7 @@ import {
   DeepJsonWriter,
 } from "@deterministic-code/patch-merger";
 
-const merger = new PatchMerger({
-  failOnCollision: false,
-  parallelWriteMode: true,
-});
+const merger = new PatchMerger();
 
 merger.registerWriter(".env", LineUpsertWriter);
 merger.registerWriter(".dockerignore", LineUpsertWriter);
@@ -65,7 +62,7 @@ const written = await merger.apply(rootDir);
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `failOnCollision` | `false` | When `true`, two patches that write different values to the same line, section path, or JSON key throw. Identical values are allowed. When `false`, the later patch wins. |
+| `failOnCollision` | `true` | Two patches that write different values to the same line, section path, or JSON key throw. Identical values are allowed. Set `false` so the later patch wins. |
 | `parallelWriteMode` | `true` | Write composed files concurrently. Set `false` to write targets one at a time. |
 
 ## Patch format
