@@ -8,5 +8,7 @@ describe("package exports", () => {
     expect(pack.LineUpsertWriter).toBeTypeOf("function");
     expect(pack.SectionWriter).toBeTypeOf("function");
     expect(pack.DeepJsonWriter).toBeTypeOf("function");
+    expect(pack.IPatchFileSystemApplyStrategy).toBeTypeOf("function");
+    expect(pack.defaultWriters.length).toBeGreaterThan(0);
   });
 });

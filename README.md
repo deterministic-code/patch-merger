@@ -1,10 +1,10 @@
 # @deterministic-code/patch-merger
 
-A standalone patch-merge engine for code generators. Emitters hand it **dumb patches** — `{ target, content, options }` — and a **writer** registered for that filename composes the final file. The writer owns every "how"; `options` is a per-patch bag the writer interprets.
+A standalone patch-merge engine for code generators. Emitters hand it **dumb patches** — `{ target, content, options }` — and a **writer** matched by glob composes the final file. `apply` sends that file through an **apply strategy** (filesystem by default; you can plug in a database or anything else).
 
 ## Why
 
-A codegen run has many emitters contributing to the same shared files — `package.json`, `.env`, `.dockerignore`, marked-block sources. Rather than have each emitter read-modify-write those files (order-dependent, racy), every emitter emits **patches**, and an end-of-run `apply` composes each target from its patches.
+A codegen run has many emitters contributing to the same shared files. Rather than have each emitter read-modify-write those files, every emitter emits **patches**, and an end-of-run `apply` composes each target.
 
 ## Usage
 
@@ -13,25 +13,15 @@ import {
   PatchMerger,
   Patch,
   LineUpsertWriter,
-  SectionWriter,
-  DeepJsonWriter,
+  defaultWriters,
 } from "@deterministic-code/patch-merger";
 
-const merger = new PatchMerger({
-  failOnCollision: false,
-  parallelWriteMode: true,
-});
-
-merger.registerWriter(".env", LineUpsertWriter);
-merger.registerWriter(".dockerignore", LineUpsertWriter);
-merger.registerWriter("app.ts", SectionWriter);
-merger.registerWriter("package.json", DeepJsonWriter);
+const merger = new PatchMerger();
 
 merger.add(
   new Patch({
     target: ".env",
     content: "PORT=3000\n",
-    options: { failIfExists: false },
   }),
 );
 merger.add(
@@ -41,7 +31,6 @@ merger.add(
     options: {
       sections: ["Section1", "SubSection1"],
       appendIfNotExists: "End",
-      failIfExists: false,
     },
   }),
 );
@@ -49,50 +38,117 @@ merger.add(
   new Patch({
     target: "package.json",
     content: '{"express": "^4"}',
-    options: {
-      jsonTarget: "/dependencies",
-      failIfExists: false,
-    },
+    options: { jsonTarget: "/dependencies" },
   }),
 );
 
 const written = await merger.apply(rootDir);
 ```
 
-`registerWriter(key, writer)` binds a composer to a basename (`.env`, `package.json`) or extension (`.txt`, `.csproj`). `add` throws if `target` has no writer. `apply(rootDir)` composes each target and writes it under `rootDir` (creates parent directories). It returns the list of written paths. A target whose composer returns `null` is skipped.
+`registerWriter(glob, writer)` binds a composer to a glob (`**/.env`, `**/*.csproj`). Later bindings win when more than one glob matches. `add` throws if `target` matches no writer. `apply(rootDir, strategy?)` composes each target and hands it to the strategy. It returns the written target paths. A composer that returns `null` is skipped.
+
+Override or extend the default glob table in the constructor:
+
+```ts
+new PatchMerger({
+  writers: [...defaultWriters, ["**/*.txt", LineUpsertWriter]],
+});
+```
+
+Pass a custom `IPatchApplyStrategy` to write somewhere other than disk (`apply(rootDir, strategy)` or `applyStrategy` in the constructor). The default is `IPatchFileSystemApplyStrategy` (mkdir + writeFile).
 
 ### Constructor options
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `failOnCollision` | `false` | When `true`, two patches that write different values to the same line, section path, or JSON key throw. Identical values are allowed. When `false`, the later patch wins. |
+| `failOnCollision` | `true` | Two patches that write different values to the same line, section path, or JSON key throw. Identical values are allowed. Set `false` so the later patch wins. |
 | `parallelWriteMode` | `true` | Write composed files concurrently. Set `false` to write targets one at a time. |
+| `writers` | `defaultWriters` | Glob → writer table. Replaces the defaults; spread `defaultWriters` to extend. |
+| `applyStrategy` | `IPatchFileSystemApplyStrategy` | Where composed files go. |
 
 ## Patch format
 
 ```ts
 new Patch({
-  target,   // output path relative to apply(rootDir)
+  target,   // path relative to apply(rootDir)
   content,  // non-empty string
-  options,  // optional PatchOptions (failIfExists, jsonTarget, sections, appendIfNotExists)
+  options,  // optional PatchOptions
 });
 ```
 
-## Writers
+## Default globs
 
-There are no built-in filename mappings. Register the writer that matches how the file should be composed.
+Last matching glob wins, so the ignore/env patterns at the bottom beat `**/*.json` for names like `.env.json`.
 
 ### LineUpsertWriter
 
-For line-oriented files such as `.env`, `.dockerignore`, and `.gitignore`. Each patch is split into non-blank lines. A `KEY=value` line upserts by `KEY`; any other line upserts by the full line.
+Line-oriented files. `KEY=value` upserts by key; any other line upserts by the full line.
+
+| Glob | Typical files |
+| --- | --- |
+| `**/.env` | `.env` |
+| `**/.env.*` | `.env.example`, `.env.local`, `.env.production` |
+| `**/.gitignore` | `.gitignore` |
+| `**/.dockerignore` | `.dockerignore` |
+| `**/.containerignore` | `.containerignore` |
+| `**/.ignore` | `.ignore` |
+| `**/.npmignore` | `.npmignore` |
+| `**/.eslintignore` | `.eslintignore` |
+| `**/.prettierignore` | `.prettierignore` |
+| `**/.stylelintignore` | `.stylelintignore` |
+| `**/.markdownlintignore` | `.markdownlintignore` |
+| `**/.helmignore` | `.helmignore` |
+| `**/.gcloudignore` | `.gcloudignore` |
+| `**/.fdignore` | `.fdignore` |
+| `**/.rgignore` | `.rgignore` |
+| `**/.cursorignore` | `.cursorignore` |
+| `**/.claudeignore` | `.claudeignore` |
+| `**/.slugignore` | `.slugignore` |
+| `**/.tfignore` | `.tfignore` |
+| `**/.cvsignore` | `.cvsignore` |
+| `**/.bzrignore` | `.bzrignore` |
+| `**/.hgignore` | `.hgignore` |
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `failIfExists` | `false` | When `true`, throw if that key or line is already present. |
 
+### DeepJsonWriter
+
+Deep-merges JSON objects. `jsonTarget` is a `/`-separated path (`""` or omitted is the root).
+
+| Glob | Typical files |
+| --- | --- |
+| `**/*.json` | `package.json`, `tsconfig.json`, `appsettings.json` |
+| `**/*.jsonc` | `tsconfig.jsonc`, VS Code config |
+| `**/*.json5` | `package.json5` |
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `jsonTarget` | `""` | Path such as `/dependencies`. Empty means the root. |
+| `failIfExists` | `false` | When `true`, throw if a leaf key already exists. New keys are still merged. |
+
 ### SectionWriter
 
-Fills `# — START Name` / `# — END Name` regions (`//` for `.ts`, `.js`, `.cs`, `.rs`). Nested paths walk from the outermost name inward. ASCII `-` markers are recognized when reading; new markers use an em dash.
+Fills `# — START Name` / `# — END Name` regions (`//` for TypeScript/JavaScript/C#/Rust-style files). Nested paths walk from the outermost name inward.
+
+| Glob | Typical files |
+| --- | --- |
+| `**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}` | `app.ts`, `index.js` |
+| `**/*.{cs,csx,fs,fsx,vb}` | `Program.cs`, `Lib.fs` |
+| `**/*.rs` | `main.rs`, `lib.rs` |
+| `**/*.{go,java,kt,kts,scala,groovy,gradle}` | `main.go`, `App.java` |
+| `**/*.{c,cc,cpp,cxx,h,hh,hpp,hxx,m,mm}` | `main.c`, `app.cpp` |
+| `**/*.{swift,php}` | `App.swift`, `index.php` |
+| `**/*.{py,rb,pl,pm,r,jl}` | `app.py`, `Gemfile`-adjacent `.rb` |
+| `**/*.{sh,bash,zsh,ksh,fish}` | `entrypoint.sh` |
+| `**/*.{yml,yaml,toml}` | `docker-compose.yml`, `Cargo.toml` |
+| `**/*.{xml,csproj,fsproj,vbproj,props,targets,nuspec}` | `GeneratedApp.csproj` |
+| `**/*.{html,htm,vue,svelte,astro}` | `index.html`, `App.vue` |
+| `**/*.{css,scss,sass,less}` | `app.css` |
+| `**/*.{sql,graphql,gql}` | `schema.sql` |
+| `**/*.{cmake,mk,md}` | `README.md` |
+| `**/{Dockerfile,Dockerfile.*,Makefile,makefile,GNUmakefile,Justfile,justfile,CMakeLists.txt}` | `Dockerfile`, `Makefile` |
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -100,19 +156,10 @@ Fills `# — START Name` / `# — END Name` regions (`//` for `.ts`, `.js`, `.cs
 | `appendIfNotExists` | `"End"` | `"None"` throws if the section is missing. `"End"` appends at the end of the parent (or file). `"Start"` inserts at the start of the parent (or file). |
 | `failIfExists` | `false` | When `true`, throw if that section path already exists. |
 
-### DeepJsonWriter
-
-Deep-merges JSON objects. `jsonTarget` is a `/`-separated path into the document (`""` or omitted is the root). Example: `jsonTarget: "/dependencies"` merges the patch object into `dependencies`.
-
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `jsonTarget` | `""` | Path such as `/package/dependencies`. Empty means the root. |
-| `failIfExists` | `false` | When `true`, throw if a leaf key already exists. New keys are still merged. |
-
 Custom composers are `(patches, { failOnCollision }) => string | null`.
 
 ## Build
 
-`npm run build` writes ESM, CJS, and `.d.ts` to `typescript/dist`. Package `exports` (`types`, `import`, `require`) all point at that folder. Regenerated dist belongs in the same commit as the source change.
+`npm run build` writes ESM, CJS, and `.d.ts` to `typescript/dist`. Package `exports` (`types`, `import`, `require`) all point at that folder.
 
-`npm test` runs Vitest with coverage.
+`npm test` runs Vitest. `npm run typecheck` runs `tsc --noEmit`.

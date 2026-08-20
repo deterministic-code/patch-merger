@@ -2,7 +2,15 @@ export declare type ComposeContext = {
     failOnCollision: boolean;
 };
 
-declare type FileWriter = (path: string, content: string) => Promise<void>;
+export declare const defaultWriters: WriterBinding[];
+
+export declare type IPatchApplyStrategy = {
+    apply(target: string, contents: string, rootDir: string): Promise<void>;
+};
+
+export declare class IPatchFileSystemApplyStrategy implements IPatchApplyStrategy {
+    apply(target: string, contents: string, rootDir: string): Promise<void>;
+}
 
 export declare class Patch {
     readonly target: string;
@@ -17,16 +25,17 @@ export declare class Patch {
 
 export declare class PatchMerger {
     #private;
-    constructor({ failOnCollision, parallelWriteMode, fileWriter, }?: PatchMergerOptions);
-    registerWriter(key: string, writer: Writer): void;
+    constructor({ failOnCollision, parallelWriteMode, writers, applyStrategy, }?: PatchMergerOptions);
+    registerWriter(glob: string, writer: Writer): void;
     add(patch: Patch): void;
-    apply(rootDir: string): Promise<string[]>;
+    apply(rootDir: string, strategy?: IPatchApplyStrategy): Promise<string[]>;
 }
 
 export declare type PatchMergerOptions = {
     failOnCollision?: boolean;
     parallelWriteMode?: boolean;
-    fileWriter?: FileWriter;
+    writers?: Iterable<WriterBinding>;
+    applyStrategy?: IPatchApplyStrategy;
 };
 
 export declare type PatchOptions = {
@@ -37,5 +46,7 @@ export declare type PatchOptions = {
 };
 
 export declare type Writer = (patches: Patch[], ctx: ComposeContext) => string | null;
+
+export declare type WriterBinding = readonly [glob: string, writer: Writer];
 
 export { }
