@@ -1,60 +1,64 @@
-import { writeFile, mkdir, chmod } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Patch } from "./patch.ts";
-import {
-  SHARED_FILE_CONVENTIONS,
-  sharedAppendWriter,
-  outputTarget,
-} from "./patch-writers/shared-append-writer.ts";
-import { packageJsonMergeWriter } from "./patch-writers/package-json-writer.ts";
-import { markedBlockWriter } from "./patch-writers/marked-block-writer.ts";
-import { cargoTomlWriter } from "./patch-writers/cargo-toml-writer.ts";
-import { dockerfileWriter } from "./patch-writers/dockerfile-writer.ts";
-import { rsWriter } from "./patch-writers/rs-writer.ts";
+import { Patch, type PatchOptions } from "./patch.ts";
+import type { Writer } from "./writer.ts";
 
-export { Patch };
+export { Patch, type PatchOptions };
+export type { Writer, ComposeContext } from "./writer.ts";
 
-export type Writer = (patches: Patch[]) => string | null;
-type IWriter = (path: string, content: string) => Promise<void>;
+type FileWriter = (path: string, content: string) => Promise<void>;
 
-const WRITERS = new Map<string, Writer>([
-  ...Object.entries(SHARED_FILE_CONVENTIONS).map(
-    ([base, convention]): [string, Writer] => [
-      base,
-      sharedAppendWriter(convention),
-    ],
-  ),
-  ["package.json", packageJsonMergeWriter],
-  ["Cargo.toml", cargoTomlWriter],
-  ["app.ts", markedBlockWriter],
-  ["test-app.ts", markedBlockWriter],
-  ["entrypoint.sh", markedBlockWriter],
-  ["Dockerfile", dockerfileWriter],
-  [".csproj", markedBlockWriter],
-  ["mod.rs", rsWriter],
-  ["lib.rs", rsWriter],
-]);
-
-const writerFor = (
-  writers: Map<string, Writer>,
-  target: string,
-): Writer | null => {
-  const base = target.slice(target.lastIndexOf("/") + 1);
-  const dot = base.lastIndexOf(".");
-  const ext = dot > 0 ? base.slice(dot) : "";
-  return writers.get(base) ?? writers.get(ext) ?? null;
+export type PatchMergerOptions = {
+  failOnCollision?: boolean;
+  parallelWriteMode?: boolean;
+  fileWriter?: FileWriter;
 };
 
-const defaultWriter: IWriter = async (path, content) => {
+const defaultFileWriter: FileWriter = async (path, content) => {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
-  if (path.endsWith(".sh")) await chmod(path, 0o755);
 };
+
+const writerFor = (writers: Map<string, Writer>, target: string) => {
+  const base = target.slice(target.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  return writers.get(base) ?? writers.get(dot > 0 ? base.slice(dot) : "") ?? null;
+};
+
+const groupByTarget = (patches: Patch[]) =>
+  patches.reduce((byTarget, patch) => {
+    byTarget.set(patch.target, [...(byTarget.get(patch.target) ?? []), patch]);
+    return byTarget;
+  }, new Map<string, Patch[]>());
+
+const mapAsync = <T, U>(
+  items: T[],
+  fn: (item: T) => Promise<U>,
+  parallel: boolean,
+): Promise<U[]> =>
+  parallel
+    ? Promise.all(items.map(fn))
+    : items.reduce(
+        async (acc, item) => [...(await acc), await fn(item)],
+        Promise.resolve([] as U[]),
+      );
 
 export class PatchMerger {
   #patches: Patch[] = [];
-  #writers = new Map(WRITERS);
-  constructor(private writer: IWriter = defaultWriter) {}
+  #writers = new Map<string, Writer>();
+  #failOnCollision: boolean;
+  #parallelWriteMode: boolean;
+  #fileWriter: FileWriter;
+
+  constructor({
+    failOnCollision = false,
+    parallelWriteMode = true,
+    fileWriter = defaultFileWriter,
+  }: PatchMergerOptions = {}) {
+    this.#failOnCollision = failOnCollision;
+    this.#parallelWriteMode = parallelWriteMode;
+    this.#fileWriter = fileWriter;
+  }
 
   registerWriter(key: string, writer: Writer): void {
     this.#writers.set(key, writer);
@@ -70,22 +74,18 @@ export class PatchMerger {
   }
 
   async apply(rootDir: string): Promise<string[]> {
-    const byTarget = new Map<string, Patch[]>();
-    for (const patch of this.#patches) {
-      const key = outputTarget(patch.target);
-      byTarget.set(key, [...(byTarget.get(key) ?? []), patch]);
-    }
-    const written: string[] = [];
-    for (const [target, pieces] of byTarget) {
-      const compose = writerFor(this.#writers, target);
-      if (!compose) {
-        throw new Error(`PatchMerger.apply: no PatchWriter for target '${target}'`);
-      }
-      const contents = compose(pieces);
-      if (contents === null) continue;
-      await this.writer(join(rootDir, target), contents);
-      written.push(target);
-    }
-    return written;
+    const ctx = { failOnCollision: this.#failOnCollision };
+    const write = async ([target, pieces]: [string, Patch[]]) => {
+      const contents = writerFor(this.#writers, target)!(pieces, ctx);
+      if (contents === null) return null;
+      await this.#fileWriter(join(rootDir, target), contents);
+      return target;
+    };
+    const written = await mapAsync(
+      [...groupByTarget(this.#patches)],
+      write,
+      this.#parallelWriteMode,
+    );
+    return written.filter((target): target is string => target !== null);
   }
 }

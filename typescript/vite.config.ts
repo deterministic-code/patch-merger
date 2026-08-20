@@ -22,6 +22,7 @@ export default defineConfig({
         format === "es" ? `${entryName}.js` : `${entryName}.cjs`,
     },
     outDir: resolve(__dirname, "dist"),
+    emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
       external: [/^node:/],
