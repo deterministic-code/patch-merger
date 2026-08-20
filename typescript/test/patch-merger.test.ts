@@ -41,6 +41,25 @@ describe("PatchMerger.add", () => {
       merger.add(new Patch({ target: "package.json", content: "{}" })),
     ).not.toThrow();
     expect(() =>
+      merger.add(new Patch({ target: "Dockerfile", content: "FROM scratch\n" })),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(
+        new Patch({ target: "scripts/entrypoint.sh", content: "exec\n" }),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(
+        new Patch({ target: "docker-compose.yml", content: "app:\n" }),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(new Patch({ target: "Cargo.toml", content: "[package]\n" })),
+    ).not.toThrow();
+    expect(() =>
+      merger.add(new Patch({ target: "App.csproj", content: "<Project />\n" })),
+    ).not.toThrow();
+    expect(() =>
       merger.add(new Patch({ target: "src/random.txt", content: "x" })),
     ).toThrow(/no PatchWriter for target 'src\/random.txt'/);
   });

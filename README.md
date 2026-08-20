@@ -130,7 +130,9 @@ Deep-merges JSON objects. `jsonTarget` is a `/`-separated path (`""` or omitted 
 
 ### SectionWriter
 
-Fills `# — START Name` / `# — END Name` regions (`//` for TypeScript/JavaScript/C#/Rust-style files). Nested paths walk from the outermost name inward.
+Fills marked regions. Nested paths walk from the outermost name inward. ASCII `-` and `=== BEGIN` / `=== END` markers are recognized when reading; new markers use an em dash (`# — START Name`). Comment syntax follows the target: `//`, `#`, `<!-- … -->`, or `/* … */`.
+
+A patch with **no** `sections` is the seed document for that target (the backend-app scaffold). Later patches fill named holes inside it.
 
 | Glob | Typical files |
 | --- | --- |
@@ -152,9 +154,9 @@ Fills `# — START Name` / `# — END Name` regions (`//` for TypeScript/JavaScr
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `sections` | *(required)* | Non-empty `["Section1", "SubSection1", …]`. Throws if missing or empty. |
+| `sections` | *(omit to seed)* | Non-empty `["Section1", "SubSection1", …]`. Omit (or omit `options`) to set the whole file. An empty array throws. |
 | `appendIfNotExists` | `"End"` | `"None"` throws if the section is missing. `"End"` appends at the end of the parent (or file). `"Start"` inserts at the start of the parent (or file). |
-| `failIfExists` | `false` | When `true`, throw if that section path already exists. |
+| `failIfExists` | `false` | When `true`, throw if that section path (or seed) already exists. |
 
 Custom composers are `(patches, { failOnCollision }) => string | null`.
 

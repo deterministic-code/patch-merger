@@ -4,12 +4,90 @@ import type { Writer } from "../writer.ts";
 
 export type AppendIfNotExists = "None" | "End" | "Start";
 
-const START_LINE =
-  /^([ \t]*)(\/\/|#)\s*[—-]\s*START\s+(\S+)\s*$/;
-const END_LINE = /^([ \t]*)(\/\/|#)\s*[—-]\s*END\s+(\S+)\s*$/;
+type CommentStyle = { open: string; close: string };
 
-const commentPrefixFor = (target: string): string =>
-  /\.(?:ts|tsx|js|jsx|cs|rs)$/.test(target) ? "//" : "#";
+const START_LINE =
+  /^([ \t]*)(<!--|\/\/|\/\*|#|--)\s*(?:[—-]\s*START|={3}\s*BEGIN)\s+(\S+)(?:\s.*)?$/;
+const END_LINE =
+  /^([ \t]*)(<!--|\/\/|\/\*|#|--)\s*(?:[—-]\s*END|={3}\s*END)\s+(\S+)\s*(?:={3})?\s*(?:\*\/|-->)?\s*$/;
+
+const XML_EXT = new Set([
+  "xml",
+  "csproj",
+  "fsproj",
+  "vbproj",
+  "props",
+  "targets",
+  "nuspec",
+  "html",
+  "htm",
+  "vue",
+  "svelte",
+  "astro",
+]);
+const BLOCK_EXT = new Set(["css", "scss", "sass", "less"]);
+const SLASH_EXT = new Set([
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "cs",
+  "csx",
+  "fs",
+  "fsx",
+  "vb",
+  "rs",
+  "go",
+  "java",
+  "kt",
+  "kts",
+  "scala",
+  "groovy",
+  "gradle",
+  "c",
+  "cc",
+  "cpp",
+  "cxx",
+  "h",
+  "hh",
+  "hpp",
+  "hxx",
+  "m",
+  "mm",
+  "swift",
+  "php",
+]);
+const HASH_NAMES = new Set([
+  "Dockerfile",
+  "Makefile",
+  "makefile",
+  "GNUmakefile",
+  "Justfile",
+  "justfile",
+  "CMakeLists.txt",
+]);
+
+const basenameOf = (target: string): string => {
+  const slash = Math.max(target.lastIndexOf("/"), target.lastIndexOf("\\"));
+  return target.slice(slash + 1);
+};
+
+const commentStyleFor = (target: string): CommentStyle => {
+  const base = basenameOf(target);
+  if (HASH_NAMES.has(base) || base.startsWith("Dockerfile.")) {
+    return { open: "#", close: "" };
+  }
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+  if (XML_EXT.has(ext)) return { open: "<!--", close: " -->" };
+  if (BLOCK_EXT.has(ext)) return { open: "/*", close: " */" };
+  if (SLASH_EXT.has(ext)) return { open: "//", close: "" };
+  return { open: "#", close: "" };
+};
 
 const splitLines = (content: string): string[] => {
   const trimmed = content.replace(/\r\n/g, "\n").replace(/\n$/, "");
@@ -19,14 +97,17 @@ const splitLines = (content: string): string[] => {
 const joinLines = (lines: string[]): string =>
   lines.length === 0 ? "" : `${lines.join("\n")}\n`;
 
-const marker = (prefix: string, indent: string, kind: "START" | "END", name: string): string =>
-  `${indent}${prefix} — ${kind} ${name}`;
+const marker = (
+  style: CommentStyle,
+  indent: string,
+  kind: "START" | "END",
+  name: string,
+): string => `${indent}${style.open} — ${kind} ${name}${style.close}`;
 
 type SectionRange = {
   start: number;
   end: number;
   indent: string;
-  prefix: string;
 };
 
 const findSection = (
@@ -55,7 +136,6 @@ const findSection = (
         start: i,
         end: j,
         indent: start[1] ?? "",
-        prefix: start[2] ?? "#",
       };
     }
     throw new Error(`SectionWriter: missing END marker for "${name}"`);
@@ -87,16 +167,16 @@ const countSiblingSections = (
 const sectionBlock = (
   names: string[],
   body: string[],
-  prefix: string,
+  style: CommentStyle,
   indent: string,
 ): string[] => {
   if (names.length === 0) return body;
   const [head, ...rest] = names;
-  const inner = sectionBlock(rest, body, prefix, indent);
+  const inner = sectionBlock(rest, body, style, indent);
   return [
-    marker(prefix, indent, "START", head!),
+    marker(style, indent, "START", head!),
     ...inner,
-    marker(prefix, indent, "END", head!),
+    marker(style, indent, "END", head!),
   ];
 };
 
@@ -111,8 +191,9 @@ const replaceRange = (
   ...lines.slice(start + deleteCount),
 ];
 
-const readSections = (patch: Patch): string[] => {
+const readSections = (patch: Patch): string[] | undefined => {
   const value = patch.options?.sections;
+  if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error(
       `SectionWriter: options.sections for "${patch.target}" must be a non-empty array`,
@@ -158,83 +239,104 @@ const insertMissing = (
 };
 
 export const sectionWriter: Writer = (patches, ctx) => {
-    let lines: string[] = [];
-    const written = new Map<string, string>();
+  let lines: string[] = [];
+  const written = new Map<string, string>();
 
-    for (const patch of patches) {
-      const sections = readSections(patch);
-      const failIfExists = boolOption(patch);
-      const appendIfNotExists = readAppendIfNotExists(patch);
-      const pathKey = sections.join("/");
-      const previous = written.get(pathKey);
+  for (const patch of patches) {
+    const sections = readSections(patch);
+    const failIfExists = boolOption(patch);
+
+    if (sections === undefined) {
+      const previous = written.get("");
       if (previous !== undefined) {
+        if (failIfExists) {
+          throw new Error(
+            `SectionWriter: seed already exists in "${patch.target}"`,
+          );
+        }
+        if (ctx.failOnCollision && previous !== patch.content) {
+          throw new Error(
+            `SectionWriter: collision in "${patch.target}" seed`,
+          );
+        }
+      }
+      written.clear();
+      written.set("", patch.content);
+      lines = splitLines(patch.content);
+      continue;
+    }
+
+    const appendIfNotExists = readAppendIfNotExists(patch);
+    const pathKey = sections.join("/");
+    const previous = written.get(pathKey);
+    if (previous !== undefined) {
+      if (failIfExists) {
+        throw new Error(
+          `SectionWriter: section "${pathKey}" already exists in "${patch.target}"`,
+        );
+      }
+      if (ctx.failOnCollision && previous !== patch.content) {
+        throw new Error(
+          `SectionWriter: collision in "${patch.target}" section "${pathKey}"`,
+        );
+      }
+    }
+    written.set(pathKey, patch.content);
+
+    const style = commentStyleFor(patch.target);
+    const body = splitLines(patch.content);
+    let lo = 0;
+    let hi = lines.length;
+    let parent: SectionRange | null = null;
+
+    for (let i = 0; i < sections.length; i++) {
+      const name = sections[i]!;
+      const remaining = sections.slice(i);
+      const matches = countSiblingSections(lines, name, lo, hi);
+      if (ctx.failOnCollision && matches > 1) {
+        throw new Error(
+          `SectionWriter: collision: duplicate section "${name}" in "${patch.target}"`,
+        );
+      }
+      const found = findSection(lines, name, lo, hi);
+      const isLeaf = i === sections.length - 1;
+
+      if (!found) {
+        const indent = parent?.indent ?? "";
+        const block = sectionBlock(remaining, body, style, indent);
+        lines = insertMissing(
+          lines,
+          parent,
+          block,
+          appendIfNotExists,
+          patch.target,
+          remaining.join("/"),
+        );
+        break;
+      }
+
+      if (isLeaf) {
         if (failIfExists) {
           throw new Error(
             `SectionWriter: section "${pathKey}" already exists in "${patch.target}"`,
           );
         }
-        if (ctx.failOnCollision && previous !== patch.content) {
-          throw new Error(
-            `SectionWriter: collision in "${patch.target}" section "${pathKey}"`,
-          );
-        }
+        lines = replaceRange(
+          lines,
+          found.start + 1,
+          found.end - found.start - 1,
+          body,
+        );
+        break;
       }
-      written.set(pathKey, patch.content);
 
-      const prefix = commentPrefixFor(patch.target);
-      const body = splitLines(patch.content);
-      let lo = 0;
-      let hi = lines.length;
-      let parent: SectionRange | null = null;
-
-      for (let i = 0; i < sections.length; i++) {
-        const name = sections[i]!;
-        const remaining = sections.slice(i);
-        const matches = countSiblingSections(lines, name, lo, hi);
-        if (ctx.failOnCollision && matches > 1) {
-          throw new Error(
-            `SectionWriter: collision: duplicate section "${name}" in "${patch.target}"`,
-          );
-        }
-        const found = findSection(lines, name, lo, hi);
-        const isLeaf = i === sections.length - 1;
-
-        if (!found) {
-          const indent = parent?.indent ?? "";
-          const block = sectionBlock(remaining, body, prefix, indent);
-          lines = insertMissing(
-            lines,
-            parent,
-            block,
-            appendIfNotExists,
-            patch.target,
-            remaining.join("/"),
-          );
-          break;
-        }
-
-        if (isLeaf) {
-          if (failIfExists) {
-            throw new Error(
-              `SectionWriter: section "${pathKey}" already exists in "${patch.target}"`,
-            );
-          }
-          lines = replaceRange(
-            lines,
-            found.start + 1,
-            found.end - found.start - 1,
-            body,
-          );
-          break;
-        }
-
-        parent = found;
-        lo = found.start + 1;
-        hi = found.end;
-      }
+      parent = found;
+      lo = found.start + 1;
+      hi = found.end;
     }
+  }
 
-    return joinLines(lines);
+  return joinLines(lines);
 };
 
 export { sectionWriter as SectionWriter };
