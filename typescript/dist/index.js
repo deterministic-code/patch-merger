@@ -1,14 +1,18 @@
-import { d as s, I as t, l as a, P as i, a as p, s as W, d as l, b as n, l as o, s as c } from "./patch-merger-DcLuR6tx.js";
+import { d as a, a as s, b as t, I as i, l as p, P as W, c as l, s as c, d, a as m, b as n, e as o, l as P, s as h } from "./patch-merger-BUeyiYse.js";
 export {
-  s as DeepJsonWriter,
-  t as IPatchFileSystemApplyStrategy,
-  a as LineUpsertWriter,
-  i as Patch,
-  p as PatchMerger,
-  W as SectionWriter,
-  l as deepJsonWriter,
-  n as defaultWriters,
-  o as lineUpsertWriter,
-  c as sectionWriter
+  a as DeepJsonWriter,
+  s as DeepXmlWriter,
+  t as DeepYamlWriter,
+  i as IPatchFileSystemApplyStrategy,
+  p as LineUpsertWriter,
+  W as Patch,
+  l as PatchMerger,
+  c as SectionWriter,
+  d as deepJsonWriter,
+  m as deepXmlWriter,
+  n as deepYamlWriter,
+  o as defaultWriters,
+  P as lineUpsertWriter,
+  h as sectionWriter
 };
 //# sourceMappingURL=index.js.map

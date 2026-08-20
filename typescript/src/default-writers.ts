@@ -1,5 +1,7 @@
 import type { Writer } from "./writer.ts";
 import { deepJsonWriter } from "./writers/deep-json-writer.ts";
+import { deepXmlWriter } from "./writers/deep-xml-writer.ts";
+import { deepYamlWriter } from "./writers/deep-yaml-writer.ts";
 import { lineUpsertWriter } from "./writers/line-upsert-writer.ts";
 import { sectionWriter } from "./writers/section-writer.ts";
 
@@ -14,8 +16,8 @@ export const defaultWriters: WriterBinding[] = [
   ["**/*.{swift,php}", sectionWriter],
   ["**/*.{py,rb,pl,pm,r,jl}", sectionWriter],
   ["**/*.{sh,bash,zsh,ksh,fish}", sectionWriter],
-  ["**/*.{yml,yaml,toml}", sectionWriter],
-  ["**/*.{xml,csproj,fsproj,vbproj,props,targets,nuspec}", sectionWriter],
+  ["**/*.toml", sectionWriter],
+  ["**/*.{csproj,fsproj,vbproj,props,targets,nuspec}", sectionWriter],
   ["**/*.{html,htm,vue,svelte,astro}", sectionWriter],
   ["**/*.{css,scss,sass,less}", sectionWriter],
   ["**/*.{sql,graphql,gql}", sectionWriter],
@@ -27,6 +29,9 @@ export const defaultWriters: WriterBinding[] = [
   ["**/*.json", deepJsonWriter],
   ["**/*.jsonc", deepJsonWriter],
   ["**/*.json5", deepJsonWriter],
+  ["**/*.yml", deepYamlWriter],
+  ["**/*.yaml", deepYamlWriter],
+  ["**/*.xml", deepXmlWriter],
   ["**/.env", lineUpsertWriter],
   ["**/.env.*", lineUpsertWriter],
   ["**/.gitignore", lineUpsertWriter],

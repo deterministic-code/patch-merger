@@ -61,7 +61,7 @@ Pass a custom `IPatchApplyStrategy` to write somewhere other than disk (`apply(r
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `failOnCollision` | `true` | Two patches that write different values to the same line, section path, or JSON key throw. Identical values are allowed. Set `false` so the later patch wins. |
+| `failOnCollision` | `true` | Two patches that write different values to the same line, section path, or document key throw. Identical values are allowed. Set `false` so the later patch wins. |
 | `parallelWriteMode` | `true` | Write composed files concurrently. Set `false` to write targets one at a time. |
 | `writers` | `defaultWriters` | Glob → writer table. Replaces the defaults; spread `defaultWriters` to extend. |
 | `applyStrategy` | `IPatchFileSystemApplyStrategy` | Where composed files go. |
@@ -113,19 +113,22 @@ Line-oriented files. `KEY=value` upserts by key; any other line upserts by the f
 | --- | --- | --- |
 | `failIfExists` | `false` | When `true`, throw if that key or line is already present. |
 
-### DeepJsonWriter
+### DeepJsonWriter / DeepYamlWriter / DeepXmlWriter
 
-Deep-merges JSON objects. `jsonTarget` is a `/`-separated path (`""` or omitted is the root).
+Deep-merges document objects. `jsonTarget` is a `/`-separated path (`""` or omitted is the root). Objects merge recursively; primitives and arrays replace. XML attributes are keys prefixed with `@_`.
 
-| Glob | Typical files |
-| --- | --- |
-| `**/*.json` | `package.json`, `tsconfig.json`, `appsettings.json` |
-| `**/*.jsonc` | `tsconfig.jsonc`, VS Code config |
-| `**/*.json5` | `package.json5` |
+| Glob | Writer | Typical files |
+| --- | --- | --- |
+| `**/*.json` | DeepJsonWriter | `package.json`, `tsconfig.json`, `appsettings.json` |
+| `**/*.jsonc` | DeepJsonWriter | `tsconfig.jsonc`, VS Code config |
+| `**/*.json5` | DeepJsonWriter | `package.json5` |
+| `**/*.yml` | DeepYamlWriter | `docker-compose.yml`, `.github/workflows/ci.yml` |
+| `**/*.yaml` | DeepYamlWriter | `openapi.yaml` |
+| `**/*.xml` | DeepXmlWriter | `app.config.xml`, `pom.xml` |
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `jsonTarget` | `""` | Path such as `/dependencies`. Empty means the root. |
+| `jsonTarget` | `""` | Path such as `/dependencies` or `/root/item`. Empty means the document root. |
 | `failIfExists` | `false` | When `true`, throw if a leaf key already exists. New keys are still merged. |
 
 ### SectionWriter
@@ -144,8 +147,8 @@ A patch with **no** `sections` is the seed document for that target (the backend
 | `**/*.{swift,php}` | `App.swift`, `index.php` |
 | `**/*.{py,rb,pl,pm,r,jl}` | `app.py`, `Gemfile`-adjacent `.rb` |
 | `**/*.{sh,bash,zsh,ksh,fish}` | `entrypoint.sh` |
-| `**/*.{yml,yaml,toml}` | `docker-compose.yml`, `Cargo.toml` |
-| `**/*.{xml,csproj,fsproj,vbproj,props,targets,nuspec}` | `GeneratedApp.csproj` |
+| `**/*.toml` | `Cargo.toml` |
+| `**/*.{csproj,fsproj,vbproj,props,targets,nuspec}` | `GeneratedApp.csproj` |
 | `**/*.{html,htm,vue,svelte,astro}` | `index.html`, `App.vue` |
 | `**/*.{css,scss,sass,less}` | `app.css` |
 | `**/*.{sql,graphql,gql}` | `schema.sql` |

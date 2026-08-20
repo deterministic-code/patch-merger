@@ -103,4 +103,69 @@ describe("DeepJsonWriter", () => {
   test("compose of no patches is an empty object", () => {
     expect(writer([], ctx())).toBe("{}\n");
   });
+
+  test("jsonTarget empty, slashes, and omitted all mean the root", () => {
+    expect(
+      parsed([
+        patch({ a: 1 }, { jsonTarget: "" }),
+        patch({ b: 2 }, { jsonTarget: "/" }),
+        patch({ c: 3 }, { jsonTarget: "//" }),
+      ]),
+    ).toEqual({ a: 1, b: 2, c: 3 });
+  });
+
+  test("strips empty jsonTarget segments", () => {
+    expect(
+      parsed([patch({ n: 1 }, { jsonTarget: "/pkg//deps/" })]),
+    ).toEqual({ pkg: { deps: { n: 1 } } });
+  });
+
+  test("replaces arrays instead of concatenating them", () => {
+    expect(
+      parsed([patch({ items: [1, 2] }), patch({ items: [3] })]),
+    ).toEqual({ items: [3] });
+  });
+
+  test("replaces an object with a primitive and a primitive with an object", () => {
+    expect(parsed([patch({ a: { b: 1 } }), patch({ a: 2 })])).toEqual({ a: 2 });
+    expect(parsed([patch({ a: 1 }), patch({ a: { b: 2 } })])).toEqual({
+      a: { b: 2 },
+    });
+  });
+
+  test("failIfExists allows nested object merges and rejects array replacement", () => {
+    expect(
+      parsed([
+        patch({ scripts: { build: "vite" } }),
+        patch({ scripts: { test: "vitest" } }, { failIfExists: true }),
+      ]),
+    ).toEqual({ scripts: { build: "vite", test: "vitest" } });
+    expect(() =>
+      parsed([
+        patch({ items: [1] }),
+        patch({ items: [1] }, { failIfExists: true }),
+      ]),
+    ).toThrow(/already exists/);
+  });
+
+  test("failOnCollision allows identical nested objects and rejects mixed types", () => {
+    expect(
+      parsed(
+        [patch({ a: { b: 1 } }), patch({ a: { b: 1, c: 2 } })],
+        true,
+      ),
+    ).toEqual({ a: { b: 1, c: 2 } });
+    expect(() =>
+      parsed([patch({ a: { b: 1 } }), patch({ a: 1 })], true),
+    ).toThrow(/collision/);
+  });
+
+  test("boolean, string, and null leaves merge at siblings", () => {
+    expect(
+      parsed([
+        patch({ ok: true, name: "app", missing: null }),
+        patch({ count: 0 }),
+      ]),
+    ).toEqual({ ok: true, name: "app", missing: null, count: 0 });
+  });
 });
