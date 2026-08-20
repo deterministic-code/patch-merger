@@ -4,8 +4,10 @@ import { SectionWriter } from "../src/writers/section-writer.ts";
 
 const writer = SectionWriter;
 const ctx = (failOnCollision = false) => ({ failOnCollision });
-const patch = (target: string, content: string, options: PatchOptions) =>
-  new Patch({ target, content, options });
+const patch = (target: string, content: string, options?: PatchOptions) =>
+  options === undefined
+    ? new Patch({ target, content })
+    : new Patch({ target, content, options });
 
 describe("SectionWriter", () => {
   test("creates a # section at End by default", () => {
@@ -201,12 +203,107 @@ describe("SectionWriter", () => {
     ).toThrow(/missing END marker/);
   });
 
+  test("omitted sections seeds the document; later patches fill regions", () => {
+    expect(writer([patch("Dockerfile", "FROM node\n")], ctx())).toBe(
+      "FROM node\n",
+    );
+    expect(
+      writer(
+        [
+          patch(
+            "Dockerfile",
+            "FROM node\n# === BEGIN MIGRATE_COPY — see PATCH_PLAN ===\n# === END MIGRATE_COPY ===\nCMD node\n",
+          ),
+          patch("Dockerfile", "COPY migrate /migrate\n", {
+            sections: ["MIGRATE_COPY"],
+          }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      "FROM node\n# === BEGIN MIGRATE_COPY — see PATCH_PLAN ===\nCOPY migrate /migrate\n# === END MIGRATE_COPY ===\nCMD node\n",
+    );
+  });
+
+  test("fills <!-- BEGIN/END --> holes in csproj seeds", () => {
+    expect(
+      writer(
+        [
+          patch(
+            "App.csproj",
+            "<ItemGroup>\n    <!-- === BEGIN DIALECT_PACKAGES — see PATCH_PLAN === -->\n    <!-- === END DIALECT_PACKAGES === -->\n</ItemGroup>\n",
+          ),
+          patch(
+            "App.csproj",
+            '    <PackageReference Include="Npgsql" Version="9.0.0" />\n',
+            { sections: ["DIALECT_PACKAGES"] },
+          ),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      "<ItemGroup>\n    <!-- === BEGIN DIALECT_PACKAGES — see PATCH_PLAN === -->\n    <PackageReference Include=\"Npgsql\" Version=\"9.0.0\" />\n    <!-- === END DIALECT_PACKAGES === -->\n</ItemGroup>\n",
+    );
+  });
+
+  test("appends missing csproj sections with XML comments", () => {
+    expect(
+      writer(
+        [
+          patch("App.csproj", "<Project />\n"),
+          patch("App.csproj", "<PackageReference />\n", {
+            sections: ["DIALECT_PACKAGES"],
+          }),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      "<Project />\n<!-- — START DIALECT_PACKAGES -->\n<PackageReference />\n<!-- — END DIALECT_PACKAGES -->\n",
+    );
+  });
+
+  test("fills Cargo.toml BEGIN/END holes from a seed", () => {
+    expect(
+      writer(
+        [
+          patch(
+            "Cargo.toml",
+            "[package]\n# === BEGIN PERF_BIN ===\n# === END PERF_BIN ===\n",
+          ),
+          patch(
+            "Cargo.toml",
+            '[[bin]]\nname = "perf_server"\npath = "src/bin/perf_server.rs"',
+            { sections: ["PERF_BIN"] },
+          ),
+        ],
+        ctx(),
+      ),
+    ).toBe(
+      '[package]\n# === BEGIN PERF_BIN ===\n[[bin]]\nname = "perf_server"\npath = "src/bin/perf_server.rs"\n# === END PERF_BIN ===\n',
+    );
+  });
+
+  test("conflicting seeds throw when failOnCollision is on", () => {
+    expect(() =>
+      writer(
+        [patch("Dockerfile", "A\n"), patch("Dockerfile", "B\n")],
+        ctx(true),
+      ),
+    ).toThrow(/collision in "Dockerfile" seed/);
+    expect(() =>
+      writer(
+        [
+          patch("Dockerfile", "A\n"),
+          patch("Dockerfile", "A\n", { failIfExists: true }),
+        ],
+        ctx(),
+      ),
+    ).toThrow(/seed already exists/);
+  });
+
   test("rejects empty or invalid sections and appendIfNotExists", () => {
     expect(() =>
       writer([patch(".env", "x\n", { sections: [] })], ctx()),
-    ).toThrow(/non-empty array/);
-    expect(() =>
-      writer([patch(".env", "x\n", {})], ctx()),
     ).toThrow(/non-empty array/);
     expect(() =>
       writer([patch(".env", "x\n", { sections: [""] })], ctx()),
