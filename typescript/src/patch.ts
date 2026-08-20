@@ -1,16 +1,23 @@
+export type PatchOptions = {
+  failIfExists?: boolean;
+  jsonTarget?: string;
+  sections?: string[];
+  appendIfNotExists?: "None" | "End" | "Start";
+};
+
 export class Patch {
   readonly target: string;
   readonly content: string;
-  readonly section?: string;
+  readonly options?: Readonly<PatchOptions>;
 
   constructor({
     target,
     content,
-    section,
+    options,
   }: {
     target: string;
     content: string;
-    section?: string;
+    options?: PatchOptions;
   }) {
     if (content.length === 0) {
       throw new Error(
@@ -19,7 +26,9 @@ export class Patch {
     }
     this.target = target;
     this.content = content;
-    if (section) this.section = section;
+    if (options !== undefined) {
+      this.options = Object.freeze({ ...options });
+    }
     Object.freeze(this);
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@deterministic-code/patch-merger",
   "version": "0.1.0",
-  "description": "Standalone patch-merge engine: filename-keyed patch writers that compose codegen target files (package.json, Cargo.toml, Dockerfile, .dockerignore, mod.rs/lib.rs, marked-block sources) from dumb patch data.",
+  "description": "Standalone patch-merge engine: LineUpsert, Section, and DeepJson writers compose codegen target files from dumb { target, content, options } patches.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -10,26 +10,26 @@
   },
   "main": "./typescript/dist/index.cjs",
   "module": "./typescript/dist/index.js",
-  "types": "./typescript/src/index.ts",
+  "types": "./typescript/dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./typescript/src/index.ts",
+      "types": "./typescript/dist/index.d.ts",
       "import": "./typescript/dist/index.js",
       "require": "./typescript/dist/index.cjs"
     },
     "./patch-merger": {
-      "types": "./typescript/src/patch-merger.ts",
+      "types": "./typescript/dist/patch-merger.d.ts",
       "import": "./typescript/dist/patch-merger.js",
       "require": "./typescript/dist/patch-merger.cjs"
     }
   },
   "files": [
-    "typescript/dist",
-    "typescript/src"
+    "typescript/dist"
   ],
   "scripts": {
     "build": "vite build --config typescript/vite.config.ts",
-    "test": "vitest run --config typescript/vite.config.ts"
+    "typecheck": "tsc --noEmit -p typescript/tsconfig.json",
+    "test": "vitest run --config typescript/vite.config.ts --coverage"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
