@@ -15,5 +15,11 @@ describe("matchesGlob", () => {
     );
     expect(matchesGlob(".env.example", "**/.env.*")).toBe(true);
     expect(matchesGlob("App.csproj", "**/*.{xml,csproj}")).toBe(true);
+    expect(matchesGlob("app.ts", "app.?s")).toBe(true);
+    expect(matchesGlob("app.ts", "app.?")).toBe(false);
+    expect(matchesGlob("deep/nested/file.ts", "**")).toBe(true);
+    expect(matchesGlob("file.ts", "**")).toBe(true);
+    expect(matchesGlob("file.ts", "**/*.ts")).toBe(true);
+    expect(matchesGlob("file.ts", "**/*.ts")).toBe(true);
   });
 });

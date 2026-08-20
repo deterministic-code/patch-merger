@@ -33,21 +33,18 @@ const mergeValue = (
 ): Json => {
   if (current === undefined) return incoming;
   if (isObject(current) && isObject(incoming)) {
-    return Object.keys(incoming).reduce<JsonObject>(
-      (result, key) => ({
-        ...result,
-        [key]: mergeValue(
-          current[key],
-          incoming[key]!,
-          name,
-          target,
-          [...path, key],
-          failIfExists,
-          failOnCollision,
-        ),
-      }),
-      { ...current },
-    );
+    for (const key of Object.keys(incoming)) {
+      current[key] = mergeValue(
+        current[key],
+        incoming[key]!,
+        name,
+        target,
+        [...path, key],
+        failIfExists,
+        failOnCollision,
+      );
+    }
+    return current;
   }
   if (failIfExists) {
     throw new Error(
@@ -91,36 +88,32 @@ export const assignAtPath = (
   }
   const path = [...prefix, head];
   if (rest.length === 0) {
-    return {
-      ...root,
-      [head]: mergeValue(
-        root[head],
-        incoming,
-        name,
-        target,
-        path,
-        failIfExists,
-        failOnCollision,
-      ),
-    };
+    root[head] = mergeValue(
+      root[head],
+      incoming,
+      name,
+      target,
+      path,
+      failIfExists,
+      failOnCollision,
+    );
+    return root;
   }
   const child =
     root[head] === undefined
       ? {}
       : asObject(root[head]!, name, target, path);
-  return {
-    ...root,
-    [head]: assignAtPath(
-      child,
-      rest,
-      incoming,
-      name,
-      target,
-      failIfExists,
-      failOnCollision,
-      path,
-    ),
-  };
+  root[head] = assignAtPath(
+    child,
+    rest,
+    incoming,
+    name,
+    target,
+    failIfExists,
+    failOnCollision,
+    path,
+  );
+  return root;
 };
 
 export const createDeepWriter = ({

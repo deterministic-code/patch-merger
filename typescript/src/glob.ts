@@ -37,9 +37,18 @@ const globToRegExp = (glob: string): RegExp => {
   return new RegExp(`^${source}$`);
 };
 
+const compiledGlobs = new Map<string, RegExp[]>();
+
+export const compileGlob = (pattern: string): RegExp[] => {
+  const key = pattern.replaceAll("\\", "/");
+  const cached = compiledGlobs.get(key);
+  if (cached) return cached;
+  const regexes = expandBraces(key).map((glob) => globToRegExp(glob));
+  compiledGlobs.set(key, regexes);
+  return regexes;
+};
+
 export const matchesGlob = (target: string, pattern: string): boolean => {
   const path = target.replaceAll("\\", "/");
-  return expandBraces(pattern.replaceAll("\\", "/")).some((glob) =>
-    globToRegExp(glob).test(path),
-  );
+  return compileGlob(pattern).some((regex) => regex.test(path));
 };

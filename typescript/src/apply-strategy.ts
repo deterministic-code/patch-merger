@@ -6,13 +6,29 @@ export type IPatchApplyStrategy = {
 };
 
 export class IPatchFileSystemApplyStrategy implements IPatchApplyStrategy {
+  #dirs = new Map<string, Promise<void>>();
+
+  #ensureDir(dir: string): Promise<void> {
+    const pending = this.#dirs.get(dir);
+    if (pending) return pending;
+    const created = mkdir(dir, { recursive: true }).then(
+      () => undefined,
+      (error: unknown) => {
+        this.#dirs.delete(dir);
+        throw error;
+      },
+    );
+    this.#dirs.set(dir, created);
+    return created;
+  }
+
   async apply(
     target: string,
     contents: string,
     rootDir: string,
   ): Promise<void> {
     const path = join(rootDir, target);
-    await mkdir(dirname(path), { recursive: true });
+    await this.#ensureDir(dirname(path));
     await writeFile(path, contents, "utf8");
   }
 }
