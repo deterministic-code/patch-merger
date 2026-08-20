@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -218,5 +218,93 @@ describe("PatchMerger.apply", () => {
     merger.add(new Patch({ target: ".env", content: "PORT=2\n" }));
     await merger.apply("/root");
     expect(strategy.writes[0]?.content).toBe("PORT=2\n");
+  });
+
+  test("result order follows add order even when later writes finish first", async () => {
+    const merger = new PatchMerger({
+      writers: [["**/*.txt", joinWriter]],
+      applyStrategy: {
+        apply: async (target) => {
+          await new Promise((resolve) => {
+            setTimeout(resolve, target === "a.txt" ? 20 : 0);
+          });
+        },
+      },
+    });
+    merger.add(new Patch({ target: "a.txt", content: "a" }));
+    merger.add(new Patch({ target: "b.txt", content: "b" }));
+    merger.add(new Patch({ target: "c.txt", content: "c" }));
+    expect(await merger.apply("/root")).toEqual(["a.txt", "b.txt", "c.txt"]);
+  });
+
+  test("sequential mode never overlaps writes", async () => {
+    let current = 0;
+    let max = 0;
+    const merger = new PatchMerger({
+      parallelWriteMode: false,
+      writers: [["**/*.txt", joinWriter]],
+      applyStrategy: {
+        apply: async () => {
+          current += 1;
+          max = Math.max(max, current);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 5);
+          });
+          current -= 1;
+        },
+      },
+    });
+    merger.add(new Patch({ target: "a.txt", content: "a" }));
+    merger.add(new Patch({ target: "b.txt", content: "b" }));
+    merger.add(new Patch({ target: "c.txt", content: "c" }));
+    await merger.apply("/root");
+    expect(max).toBe(1);
+  });
+
+  test("caps in-flight parallel writes", async () => {
+    let current = 0;
+    let max = 0;
+    const merger = new PatchMerger({
+      writers: [["**/*.txt", joinWriter]],
+      applyStrategy: {
+        apply: async () => {
+          current += 1;
+          max = Math.max(max, current);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 5);
+          });
+          current -= 1;
+        },
+      },
+    });
+    for (let i = 0; i < 40; i += 1) {
+      merger.add(new Patch({ target: `f${i}.txt`, content: `${i}` }));
+    }
+    await merger.apply("/root");
+    expect(max).toBeGreaterThan(1);
+    expect(max).toBeLessThanOrEqual(32);
+  });
+
+  test("writes two nested files through the filesystem strategy", async () => {
+    const root = await mkdtemp(join(tmpdir(), "patch-merger-"));
+    const merger = new PatchMerger();
+    merger.add(new Patch({ target: "nested/.env", content: "A=1\n" }));
+    merger.add(new Patch({ target: "nested/.gitignore", content: "dist\n" }));
+    expect(await merger.apply(root)).toEqual(["nested/.env", "nested/.gitignore"]);
+    expect(await readFile(join(root, "nested/.env"), "utf8")).toBe("A=1\n");
+    expect(await readFile(join(root, "nested/.gitignore"), "utf8")).toBe(
+      "dist\n",
+    );
+  });
+
+  test("retries mkdir after a failed ensure", async () => {
+    const root = await mkdtemp(join(tmpdir(), "patch-merger-"));
+    const blocker = join(root, "nested");
+    await writeFile(blocker, "not-a-dir");
+    const strategy = new IPatchFileSystemApplyStrategy();
+    await expect(strategy.apply("nested/.env", "A=1\n", root)).rejects.toThrow();
+    await unlink(blocker);
+    await strategy.apply("nested/.env", "A=1\n", root);
+    expect(await readFile(join(root, "nested/.env"), "utf8")).toBe("A=1\n");
   });
 });

@@ -23,6 +23,7 @@ export declare type IPatchApplyStrategy = {
 };
 
 export declare class IPatchFileSystemApplyStrategy implements IPatchApplyStrategy {
+    #private;
     apply(target: string, contents: string, rootDir: string): Promise<void>;
 }
 

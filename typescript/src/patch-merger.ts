@@ -5,7 +5,7 @@ import {
   type IPatchApplyStrategy,
 } from "./apply-strategy.ts";
 import { defaultWriters, type WriterBinding } from "./default-writers.ts";
-import { matchesGlob } from "./glob.ts";
+import { compileGlob } from "./glob.ts";
 
 export { Patch, type PatchOptions };
 export type { Writer, ComposeContext } from "./writer.ts";
@@ -22,35 +22,54 @@ export type PatchMergerOptions = {
   applyStrategy?: IPatchApplyStrategy;
 };
 
-const writerFor = (writers: WriterBinding[], target: string) => {
-  for (let i = writers.length - 1; i >= 0; i--) {
-    const binding = writers[i]!;
-    if (matchesGlob(target, binding[0])) return binding[1];
+const WRITE_CONCURRENCY = 32;
+
+type CompiledBinding = { regexes: RegExp[]; writer: Writer };
+
+type TargetGroup = { writer: Writer; patches: Patch[] };
+
+const compileBindings = (
+  writers: Iterable<WriterBinding>,
+): CompiledBinding[] =>
+  [...writers].map(([glob, writer]) => ({
+    regexes: compileGlob(glob),
+    writer,
+  }));
+
+const writerFor = (bindings: CompiledBinding[], target: string) => {
+  const path = target.replaceAll("\\", "/");
+  for (let i = bindings.length - 1; i >= 0; i--) {
+    const binding = bindings[i]!;
+    if (binding.regexes.some((regex) => regex.test(path))) return binding.writer;
   }
   return null;
 };
 
-const groupByTarget = (patches: Patch[]) =>
-  patches.reduce((byTarget, patch) => {
-    byTarget.set(patch.target, [...(byTarget.get(patch.target) ?? []), patch]);
-    return byTarget;
-  }, new Map<string, Patch[]>());
-
-const mapAsync = <T, U>(
-  items: T[],
-  fn: (item: T) => Promise<U>,
-  parallel: boolean,
-): Promise<U[]> =>
-  parallel
-    ? Promise.all(items.map(fn))
-    : items.reduce(
-        async (acc, item) => [...(await acc), await fn(item)],
-        Promise.resolve([] as U[]),
-      );
+const runPool = async (
+  start: () => Promise<void>,
+  inFlight: { count: number },
+  waiters: Array<() => void>,
+  limit: number,
+): Promise<void> => {
+  if (inFlight.count >= limit) {
+    await new Promise<void>((resolve) => {
+      waiters.push(resolve);
+    });
+  } else {
+    inFlight.count += 1;
+  }
+  try {
+    await start();
+  } finally {
+    const next = waiters.shift();
+    if (next) next();
+    else inFlight.count -= 1;
+  }
+};
 
 export class PatchMerger {
-  #patches: Patch[] = [];
-  #writers: WriterBinding[];
+  #targets = new Map<string, TargetGroup>();
+  #bindings: CompiledBinding[];
   #failOnCollision: boolean;
   #parallelWriteMode: boolean;
   #applyStrategy: IPatchApplyStrategy;
@@ -63,21 +82,28 @@ export class PatchMerger {
   }: PatchMergerOptions = {}) {
     this.#failOnCollision = failOnCollision;
     this.#parallelWriteMode = parallelWriteMode;
-    this.#writers = [...writers];
+    this.#bindings = compileBindings(writers);
     this.#applyStrategy = applyStrategy;
   }
 
   registerWriter(glob: string, writer: Writer): void {
-    this.#writers.push([glob, writer]);
+    this.#bindings.push({ regexes: compileGlob(glob), writer });
   }
 
   add(patch: Patch): void {
-    if (!writerFor(this.#writers, patch.target)) {
+    const writer = writerFor(this.#bindings, patch.target);
+    if (!writer) {
       throw new Error(
         `PatchMerger.add: no PatchWriter for target '${patch.target}'`,
       );
     }
-    this.#patches.push(patch);
+    const group = this.#targets.get(patch.target);
+    if (group) {
+      group.writer = writer;
+      group.patches.push(patch);
+      return;
+    }
+    this.#targets.set(patch.target, { writer, patches: [patch] });
   }
 
   async apply(
@@ -85,17 +111,36 @@ export class PatchMerger {
     strategy: IPatchApplyStrategy = this.#applyStrategy,
   ): Promise<string[]> {
     const ctx = { failOnCollision: this.#failOnCollision };
-    const write = async ([target, pieces]: [string, Patch[]]) => {
-      const contents = writerFor(this.#writers, target)!(pieces, ctx);
-      if (contents === null) return null;
-      await strategy.apply(target, contents, rootDir);
-      return target;
-    };
-    const written = await mapAsync(
-      [...groupByTarget(this.#patches)],
-      write,
-      this.#parallelWriteMode,
-    );
-    return written.filter((target): target is string => target !== null);
+    const written: string[] = [];
+
+    if (!this.#parallelWriteMode) {
+      for (const [target, group] of this.#targets) {
+        const contents = group.writer(group.patches, ctx);
+        if (contents === null) continue;
+        await strategy.apply(target, contents, rootDir);
+        written.push(target);
+      }
+      return written;
+    }
+
+    const pending: Promise<void>[] = [];
+    const inFlight = { count: 0 };
+    const waiters: Array<() => void> = [];
+
+    for (const [target, group] of this.#targets) {
+      const contents = group.writer(group.patches, ctx);
+      if (contents === null) continue;
+      written.push(target);
+      pending.push(
+        runPool(
+          () => strategy.apply(target, contents, rootDir),
+          inFlight,
+          waiters,
+          WRITE_CONCURRENCY,
+        ),
+      );
+    }
+    await Promise.all(pending);
+    return written;
   }
 }
