@@ -120,10 +120,16 @@ describe("DeepJsonWriter", () => {
     ).toEqual({ pkg: { deps: { n: 1 } } });
   });
 
-  test("replaces arrays instead of concatenating them", () => {
+  test("concatenates unique array items in first-seen order", () => {
     expect(
-      parsed([patch({ items: [1, 2] }), patch({ items: [3] })]),
-    ).toEqual({ items: [3] });
+      parsed([
+        patch({ include: ["app.ts", "server.ts"] }),
+        patch({ include: ["services/**/*.ts"] }),
+        patch({ include: ["services/**/*.ts", "routes/**/*.ts"] }),
+      ]),
+    ).toEqual({
+      include: ["app.ts", "server.ts", "services/**/*.ts", "routes/**/*.ts"],
+    });
   });
 
   test("replaces an object with a primitive and a primitive with an object", () => {
@@ -133,19 +139,19 @@ describe("DeepJsonWriter", () => {
     });
   });
 
-  test("failIfExists allows nested object merges and rejects array replacement", () => {
+  test("failIfExists allows nested object merges and unique array concatenation", () => {
     expect(
       parsed([
         patch({ scripts: { build: "vite" } }),
         patch({ scripts: { test: "vitest" } }, { failIfExists: true }),
       ]),
     ).toEqual({ scripts: { build: "vite", test: "vitest" } });
-    expect(() =>
+    expect(
       parsed([
         patch({ items: [1] }),
-        patch({ items: [1] }, { failIfExists: true }),
+        patch({ items: [1, 2] }, { failIfExists: true }),
       ]),
-    ).toThrow(/already exists/);
+    ).toEqual({ items: [1, 2] });
   });
 
   test("failOnCollision allows identical nested objects and rejects mixed types", () => {
