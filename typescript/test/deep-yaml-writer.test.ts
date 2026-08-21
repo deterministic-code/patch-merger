@@ -118,10 +118,10 @@ describe("DeepYamlWriter", () => {
     });
   });
 
-  test("replaces arrays instead of concatenating them", () => {
+  test("concatenates unique array items in first-seen order", () => {
     expect(
       parsed([patch("items:\n  - 1\n  - 2\n"), patch("items:\n  - 3\n")]),
-    ).toEqual({ items: [3] });
+    ).toEqual({ items: [1, 2, 3] });
   });
 
   test("replaces an object with a primitive and a primitive with an object", () => {
@@ -131,19 +131,19 @@ describe("DeepYamlWriter", () => {
     });
   });
 
-  test("failIfExists allows nested object merges and rejects array replacement", () => {
+  test("failIfExists allows nested object merges and unique array concatenation", () => {
     expect(
       parsed([
         patch("scripts:\n  build: vite\n"),
         patch("scripts:\n  test: vitest\n", { failIfExists: true }),
       ]),
     ).toEqual({ scripts: { build: "vite", test: "vitest" } });
-    expect(() =>
+    expect(
       parsed([
         patch("items:\n  - 1\n"),
-        patch("items:\n  - 1\n", { failIfExists: true }),
+        patch("items:\n  - 1\n  - 2\n", { failIfExists: true }),
       ]),
-    ).toThrow(/already exists/);
+    ).toEqual({ items: [1, 2] });
   });
 
   test("failOnCollision allows identical nested objects and rejects mixed types", () => {
@@ -202,7 +202,7 @@ describe("DeepYamlWriter", () => {
         patch("list:\n  - a\nvalue: old\n"),
         patch("list:\n  - b\nvalue: new\n"),
       ]),
-    ).toEqual({ list: ["b"], value: "new" });
+    ).toEqual({ list: ["a", "b"], value: "new" });
   });
 
   test("identical arrays are allowed under failOnCollision", () => {
@@ -211,10 +211,10 @@ describe("DeepYamlWriter", () => {
     ).toEqual({ list: ["a", "b"] });
   });
 
-  test("conflicting arrays throw under failOnCollision", () => {
-    expect(() =>
+  test("distinct arrays concatenate under failOnCollision", () => {
+    expect(
       parsed([patch("list:\n  - a\n"), patch("list:\n  - b\n")], true),
-    ).toThrow(/collision/);
+    ).toEqual({ list: ["a", "b"] });
   });
 
   test("writes a trailing newline", () => {

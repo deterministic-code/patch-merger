@@ -115,7 +115,7 @@ Line-oriented files. `KEY=value` upserts by key; any other line upserts by the f
 
 ### DeepJsonWriter / DeepYamlWriter / DeepXmlWriter
 
-Deep-merges document objects. `jsonTarget` is a `/`-separated path (`""` or omitted is the root). Objects merge recursively; primitives and arrays replace. XML attributes are keys prefixed with `@_`.
+Deep-merges document objects. `jsonTarget` is a `/`-separated path (`""` or omitted is the root). Objects merge recursively; arrays concatenate unique items (stable order); primitives replace. XML attributes are keys prefixed with `@_`.
 
 | Glob | Writer | Typical files |
 | --- | --- | --- |

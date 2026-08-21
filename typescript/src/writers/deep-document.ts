@@ -7,6 +7,21 @@ export type Json = string | number | boolean | null | Json[] | JsonObject;
 export const isObject = (value: Json | undefined): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+const isArray = (value: Json | undefined): value is Json[] =>
+  Array.isArray(value);
+
+const uniqueConcat = (current: Json[], incoming: Json[]): Json[] => {
+  const seen = new Set(current.map((item) => JSON.stringify(item)));
+  const merged = [...current];
+  for (const item of incoming) {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+};
+
 export const parsePath = (jsonTarget: string) =>
   jsonTarget.split("/").filter((segment) => segment.length > 0);
 
@@ -45,6 +60,9 @@ const mergeValue = (
       );
     }
     return current;
+  }
+  if (isArray(current) && isArray(incoming)) {
+    return uniqueConcat(current, incoming);
   }
   if (failIfExists) {
     throw new Error(
